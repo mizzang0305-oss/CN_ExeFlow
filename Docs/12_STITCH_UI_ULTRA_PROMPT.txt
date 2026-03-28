@@ -1,0 +1,103 @@
+You are a senior enterprise product designer.
+Design a complete admin web application UI for a CEO directive execution management system.
+
+## Product concept
+This product is not a generic task tool.
+It is an executive operations system that tracks:
+- CEO directives
+- department execution
+- staff action logs
+- evidence such as photos and documents
+- weekly executive summaries
+
+## UX goals
+- Executive-first clarity
+- Department-head execution speed
+- Evidence-based reporting
+- Drill-down from summary to detail
+- Mobile-friendly log entry
+
+## Core pages to design
+
+### 1. CEO Dashboard
+Must include:
+- KPI cards: total directives, new this week, in progress, delayed, completed, completion rate, on-time completion rate
+- Department performance chart
+- Delayed directives list
+- Upcoming deadlines
+- CEO attention items
+- Recent activity feed
+
+### 2. Directive List Page
+Must include:
+- Search
+- Filters for status, department, priority
+- Table columns:
+  - directive number
+  - title
+  - department
+  - owner
+  - status
+  - priority
+  - instructed date
+  - due date
+  - delayed flag
+- create directive button
+
+### 3. Directive Detail Page
+Must include:
+- directive basic info
+- directive description
+- department assignment section
+- staff task section
+- timeline of action logs
+- evidence gallery/files
+- status history
+- completion request / approve / reject panel
+
+### 4. Department Execution Board
+Must include:
+- department KPI summary
+- assigned directives
+- staff workload summary
+- delayed tasks
+- missing evidence filter
+- completion request queue
+
+### 5. Action Log Entry Screen
+Must include:
+- quick input form
+- action type
+- summary
+- detailed note
+- happened date/time
+- next action
+- risk note
+- photo upload
+- document upload
+- mobile-first layout
+
+### 6. Weekly Report Screen
+Must include:
+- weekly summary cards
+- department breakdown
+- delayed items table
+- completed items table
+- executive summary block
+
+## Style direction
+- clean enterprise dashboard
+- minimal but powerful
+- modern data-heavy UI
+- clear spacing
+- readable typography
+- card + table + side-panel patterns
+- suitable for desktop primary and mobile log entry
+
+## Output
+Provide:
+- full page structure
+- component hierarchy
+- section descriptions
+- layout guidance
+- design system hints

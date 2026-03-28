@@ -1,0 +1,73 @@
+You are a senior full-stack architect and SaaS systems designer.
+
+Build the foundational architecture for a CEO directive execution management system.
+
+## System purpose
+Track:
+- top-down executive directives
+- department assignments
+- staff execution logs
+- evidence attachments
+- completion approval workflow
+- weekly summary reports
+
+## Non-negotiable principles
+- directive master record + department execution + action logs + evidence
+- strong auditability
+- role-based permissions
+- clear lifecycle states
+- weekly aggregated reporting
+
+## Deliverables required
+1. Data model design
+2. Entity relationships
+3. REST API contract
+4. State machine design
+5. Permission rules
+6. Weekly reporting aggregation logic
+7. Delay detection logic
+8. Suggested backend architecture
+9. Suggested frontend page architecture
+10. Validation rules
+
+## Core entities
+- departments
+- users
+- directives
+- directive_departments
+- directive_tasks
+- directive_logs
+- directive_attachments
+- weekly_reports
+- audit_logs
+
+## State lifecycle
+- NEW
+- IN_PROGRESS
+- COMPLETION_REQUESTED
+- DELAYED
+- COMPLETED
+- REJECTED
+
+## Role model
+- CEO
+- SUPER_ADMIN
+- DEPARTMENT_HEAD
+- STAFF
+- VIEWER
+
+## Business rules
+- directive number format: DIR-YYYY-0001
+- no hard delete for directives
+- completion requires approval
+- delay is automatically detected when due_date is exceeded and directive is not completed
+- all important changes must write audit logs
+
+## Output format
+Return:
+- architecture overview
+- data model details
+- SQL-oriented schema suggestion
+- API endpoints grouped by resource
+- validation and workflow rules
+- implementation priorities for MVP
