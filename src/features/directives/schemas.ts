@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-import { directiveLogTypes, directiveStatuses } from "./constants";
+import type { DirectiveUrgentLevel } from "./types";
+
+import { directiveLogTypes, directiveStatuses, directiveUrgentLevels } from "./constants";
 
 function normalizeDateTime(value: string) {
   const parsed = new Date(value);
@@ -20,6 +22,37 @@ function normalizeOptionalDateTime(value: string | null | undefined) {
   return normalizeDateTime(value);
 }
 
+const directiveUrgentLevelSchema = z.enum(directiveUrgentLevels);
+
+export function normalizeUrgentLevel(value: unknown): DirectiveUrgentLevel | null {
+  if (value === null || value === undefined || value === "" || value === 0 || value === "0") {
+    return null;
+  }
+
+  if (value === 1 || value === "1") {
+    return "LOW";
+  }
+
+  if (value === 2 || value === "2") {
+    return "HIGH";
+  }
+
+  if (value === 3 || value === "3") {
+    return "CRITICAL";
+  }
+
+  if (value === "LOW" || value === "HIGH" || value === "CRITICAL") {
+    return value;
+  }
+
+  return null;
+}
+
+const directiveUrgentLevelInputSchema = z.preprocess(
+  (value) => normalizeUrgentLevel(value),
+  directiveUrgentLevelSchema.nullable(),
+);
+
 export const directiveListQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
@@ -37,7 +70,7 @@ export const createDirectiveSchema = z
     selectedDepartmentIds: z.array(z.string().uuid()).min(1),
     targetScope: z.enum(["ALL", "SELECTED"]),
     title: z.string().trim().min(1).max(160),
-    urgentLevel: z.coerce.number().int().min(1).max(3).nullable().optional(),
+    urgentLevel: directiveUrgentLevelInputSchema.optional(),
   })
   .superRefine((value, context) => {
     if (!value.selectedDepartmentIds.includes(value.primaryDepartmentId)) {
@@ -53,7 +86,7 @@ export const createDirectiveSchema = z
     dueDate: normalizeOptionalDateTime(value.dueDate ?? null),
     ownerUserId: value.ownerUserId ?? null,
     selectedDepartmentIds: Array.from(new Set(value.selectedDepartmentIds)),
-    urgentLevel: value.isUrgent ? value.urgentLevel ?? 1 : null,
+    urgentLevel: value.isUrgent ? value.urgentLevel ?? null : null,
   }));
 
 export const logPayloadSchema = z

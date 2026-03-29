@@ -18,6 +18,8 @@ export const directiveLogTypes = [
   "STATUS_NOTE",
 ] as const;
 
+export const directiveUrgentLevels = ["LOW", "HIGH", "CRITICAL"] as const;
+
 export const directiveStatusLabels = {
   NEW: "신규",
   IN_PROGRESS: "진행 중",
@@ -25,6 +27,12 @@ export const directiveStatusLabels = {
   DELAYED: "지연",
   COMPLETED: "완료",
   REJECTED: "반려",
+} as const;
+
+export const directiveUrgentLevelLabels = {
+  LOW: "L1",
+  HIGH: "L2",
+  CRITICAL: "L3",
 } as const;
 
 export const directiveLogTypeLabels = {

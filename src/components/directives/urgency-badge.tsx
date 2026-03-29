@@ -1,3 +1,5 @@
+import { directiveUrgentLevelLabels, type DirectiveUrgentLevel } from "@/features/directives";
+
 import { Badge } from "@/components/ui/badge";
 
 export function UrgencyBadge({
@@ -5,11 +7,13 @@ export function UrgencyBadge({
   urgentLevel,
 }: {
   isUrgent: boolean;
-  urgentLevel: number | null;
+  urgentLevel: DirectiveUrgentLevel | null;
 }) {
   if (!isUrgent) {
     return <Badge tone="muted">일반</Badge>;
   }
 
-  return <Badge tone="danger">{`긴급 L${urgentLevel ?? 1}`}</Badge>;
+  const label = urgentLevel ? directiveUrgentLevelLabels[urgentLevel] : null;
+
+  return <Badge tone="danger">{label ? `긴급 ${label}` : "긴급"}</Badge>;
 }
