@@ -3,22 +3,31 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
-import type { UserActivityType } from "@/features/activity/types";
+import type { NotificationPermissionState, UserActivityType } from "@/features/activity/types";
 
-const ACTIVITY_THROTTLE_MS = 30 * 1000;
-const DEVICE_SYNC_THROTTLE_MS = 30 * 60 * 1000;
-const DEVICE_KEY_STORAGE_KEY = "cn-exeflow-device-key";
-const DEVICE_SYNC_STORAGE_KEY = "cn-exeflow-device-last-sync";
-const NOTIFICATION_PROMPT_STORAGE_KEY = "cn-exeflow-notification-prompted";
+const ACTIVITY_THROTTLE_MS = 45 * 1000;
+const DEVICE_SYNC_THROTTLE_MS = 15 * 60 * 1000;
+const DEVICE_KEY_STORAGE = "cn-exeflow-device-key";
+const PUSH_TOKEN_STORAGE = "cn-exeflow-push-token";
+const PUSH_PERMISSION_REQUESTED_STORAGE = "cn-exeflow-push-permission-requested";
 
-type ActivityDescriptor = {
+function readJsonFetch(url: string, body: Record<string, unknown>) {
+  return fetch(url, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    keepalive: true,
+    method: "POST",
+  });
+}
+
+function resolvePageActivity(pathname: string): {
   activityType: UserActivityType;
   pagePath: string;
-  targetId?: string | null;
-  targetType?: string | null;
-} | null;
-
-function inferActivityDescriptor(pathname: string): ActivityDescriptor {
+  targetId?: string;
+  targetType?: string;
+} | null {
   if (pathname === "/dashboard") {
     return {
       activityType: "DASHBOARD_VIEW",
@@ -42,12 +51,7 @@ function inferActivityDescriptor(pathname: string): ActivityDescriptor {
 
   const segments = pathname.split("/").filter(Boolean);
 
-  if (
-    segments.length === 2 &&
-    segments[0] === "directives" &&
-    segments[1] !== "new" &&
-    segments[1] !== "approval-queue"
-  ) {
+  if (segments.length === 2 && segments[0] === "directives" && segments[1] !== "new") {
     return {
       activityType: "DIRECTIVE_DETAIL_VIEW",
       pagePath: pathname,
@@ -59,90 +63,96 @@ function inferActivityDescriptor(pathname: string): ActivityDescriptor {
   return null;
 }
 
-function shouldThrottle(storageKey: string, scopeKey: string, windowMs: number) {
-  const compositeKey = `${storageKey}:${scopeKey}`;
-  const lastValue = window.localStorage.getItem(compositeKey);
+function resolveDeviceType() {
+  const userAgent = navigator.userAgent.toLowerCase();
 
-  if (!lastValue) {
-    window.localStorage.setItem(compositeKey, String(Date.now()));
-    return false;
+  if (userAgent.includes("ipad") || userAgent.includes("tablet")) {
+    return "태블릿";
   }
 
-  const lastTime = Number(lastValue);
-
-  if (!Number.isFinite(lastTime) || Date.now() - lastTime >= windowMs) {
-    window.localStorage.setItem(compositeKey, String(Date.now()));
-    return false;
+  if (userAgent.includes("mobi") || userAgent.includes("iphone") || userAgent.includes("android")) {
+    return "모바일";
   }
 
-  return true;
+  return "데스크톱";
 }
 
-function getOrCreateDeviceKey() {
-  const existing = window.localStorage.getItem(DEVICE_KEY_STORAGE_KEY);
+function resolvePlatform() {
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  if (userAgent.includes("android")) {
+    return "안드로이드";
+  }
+
+  if (userAgent.includes("iphone") || userAgent.includes("ipad") || userAgent.includes("ios")) {
+    return "iOS";
+  }
+
+  if (userAgent.includes("windows")) {
+    return "윈도우";
+  }
+
+  if (userAgent.includes("mac os") || userAgent.includes("macintosh")) {
+    return "맥";
+  }
+
+  if (userAgent.includes("linux")) {
+    return "리눅스";
+  }
+
+  return "웹";
+}
+
+function ensureDeviceKey() {
+  const existing = window.localStorage.getItem(DEVICE_KEY_STORAGE);
 
   if (existing) {
     return existing;
   }
 
-  const nextValue = crypto.randomUUID();
-  window.localStorage.setItem(DEVICE_KEY_STORAGE_KEY, nextValue);
-  return nextValue;
+  const generated = crypto.randomUUID();
+  window.localStorage.setItem(DEVICE_KEY_STORAGE, generated);
+  return generated;
 }
 
-function inferPlatform() {
-  const userAgent = navigator.userAgent.toLowerCase();
+function shouldThrottle(key: string, minIntervalMs: number) {
+  const now = Date.now();
+  const lastSentAt = Number(window.localStorage.getItem(key) ?? "0");
 
-  if (userAgent.includes("iphone") || userAgent.includes("ipad") || userAgent.includes("ios")) {
-    return "IOS";
+  if (now - lastSentAt < minIntervalMs) {
+    return true;
   }
 
-  if (userAgent.includes("android")) {
-    return "ANDROID";
-  }
-
-  if (userAgent.includes("windows")) {
-    return "WINDOWS";
-  }
-
-  if (userAgent.includes("macintosh") || userAgent.includes("mac os")) {
-    return "MAC";
-  }
-
-  if (userAgent.includes("linux")) {
-    return "LINUX";
-  }
-
-  return "OTHER";
+  window.localStorage.setItem(key, String(now));
+  return false;
 }
 
-function inferDeviceType() {
-  const userAgent = navigator.userAgent.toLowerCase();
-
-  if (userAgent.includes("ipad") || userAgent.includes("tablet")) {
-    return "TABLET";
+function readNotificationPermission(): NotificationPermissionState {
+  if (typeof Notification === "undefined") {
+    return "unsupported";
   }
 
-  if (
-    userAgent.includes("mobile") ||
-    userAgent.includes("iphone") ||
-    userAgent.includes("android")
-  ) {
-    return "MOBILE";
-  }
-
-  return "DESKTOP";
+  return Notification.permission as NotificationPermissionState;
 }
 
-async function postJson(url: string, body: Record<string, unknown>) {
-  await fetch(url, {
-    body: JSON.stringify(body),
-    headers: {
-      "Content-Type": "application/json",
-    },
-    keepalive: true,
-    method: "POST",
-  });
+async function requestNotificationPermissionIfNeeded() {
+  const current = readNotificationPermission();
+
+  if (current === "unsupported" || current !== "default") {
+    return current;
+  }
+
+  if (window.localStorage.getItem(PUSH_PERMISSION_REQUESTED_STORAGE) === "true") {
+    return current;
+  }
+
+  window.localStorage.setItem(PUSH_PERMISSION_REQUESTED_STORAGE, "true");
+
+  try {
+    return (await Notification.requestPermission()) as NotificationPermissionState;
+  } catch {
+    return current;
+  }
 }
 
 export function SessionTelemetryBridge() {
@@ -153,22 +163,19 @@ export function SessionTelemetryBridge() {
       return;
     }
 
-    const descriptor = inferActivityDescriptor(pathname);
+    const activity = resolvePageActivity(pathname);
 
-    if (!descriptor) {
+    if (!activity) {
       return;
     }
 
-    if (shouldThrottle("cn-exeflow-activity", descriptor.pagePath, ACTIVITY_THROTTLE_MS)) {
+    const throttleKey = `cn-exeflow-activity:${activity.activityType}:${activity.targetId ?? pathname}`;
+
+    if (shouldThrottle(throttleKey, ACTIVITY_THROTTLE_MS)) {
       return;
     }
 
-    void postJson("/api/activity/track", {
-      activityType: descriptor.activityType,
-      pagePath: descriptor.pagePath,
-      targetId: descriptor.targetId ?? null,
-      targetType: descriptor.targetType ?? null,
-    });
+    void readJsonFetch("/api/activity/track", activity);
   }, [pathname]);
 
   useEffect(() => {
@@ -176,39 +183,26 @@ export function SessionTelemetryBridge() {
       return;
     }
 
-    if (shouldThrottle(DEVICE_SYNC_STORAGE_KEY, "global", DEVICE_SYNC_THROTTLE_MS)) {
+    const deviceKey = ensureDeviceKey();
+    const throttleKey = `cn-exeflow-device-sync:${deviceKey}`;
+
+    if (shouldThrottle(throttleKey, DEVICE_SYNC_THROTTLE_MS)) {
       return;
     }
 
-    const deviceKey = getOrCreateDeviceKey();
-    const currentPermission =
-      typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+    const syncDevice = async () => {
+      const notificationPermission = await requestNotificationPermissionIfNeeded();
 
-    const syncDevice = async (permission: string) => {
-      await postJson("/api/user/device", {
+      await readJsonFetch("/api/user/device", {
         deviceKey,
-        deviceType: inferDeviceType(),
-        notificationPermission: permission,
-        platform: inferPlatform(),
-        pushToken: window.localStorage.getItem("cn-exeflow-push-token"),
+        deviceType: resolveDeviceType(),
+        notificationPermission,
+        platform: resolvePlatform(),
+        pushToken: window.localStorage.getItem(PUSH_TOKEN_STORAGE),
       });
     };
 
-    if (
-      typeof Notification !== "undefined" &&
-      currentPermission === "default" &&
-      !window.localStorage.getItem(NOTIFICATION_PROMPT_STORAGE_KEY)
-    ) {
-      window.localStorage.setItem(NOTIFICATION_PROMPT_STORAGE_KEY, "requested");
-
-      void Notification.requestPermission()
-        .then((permission) => syncDevice(permission))
-        .catch(() => syncDevice("default"));
-
-      return;
-    }
-
-    void syncDevice(currentPermission);
+    void syncDevice();
   }, [pathname]);
 
   return null;

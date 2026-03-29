@@ -11,7 +11,7 @@ export const authPasswordSchema = z
   .min(8, "비밀번호는 8자 이상 입력해주세요.")
   .max(72, "비밀번호는 72자 이하로 입력해주세요.")
   .refine((value) => /[A-Za-z]/.test(value) && /\d/.test(value), {
-    message: "비밀번호는 영문과 숫자를 함께 포함해주세요.",
+    message: "비밀번호는 영문과 숫자를 모두 포함해주세요.",
   });
 
 export const authLookupSchema = z.object({
@@ -27,6 +27,7 @@ export const authLoginSchema = z.object({
 export const authActivateSchema = z.object({
   email: authEmailSchema,
   password: authPasswordSchema,
+  rememberMe: z.boolean().default(true),
 });
 
 export const authResetPasswordSchema = z.object({

@@ -1,4 +1,4 @@
-import { activateUserByEmail, authActivateSchema } from "@/features/auth";
+import { activateUserWithEmail, authActivateSchema } from "@/features/auth";
 import { createApiSuccessResponse, handleApiError, readJsonBody } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
 
@@ -12,13 +12,13 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       throw new ApiError(
         400,
-        parsed.error.issues[0]?.message ?? "최초 사용자 설정 정보를 다시 확인해주세요.",
+        parsed.error.issues[0]?.message ?? "최초 사용자 정보를 다시 확인해주세요.",
         parsed.error.flatten(),
-        "AUTH_ACTIVATION_INVALID",
+        "AUTH_ACTIVATE_INVALID",
       );
     }
 
-    const result = await activateUserByEmail(request, parsed.data);
+    const result = await activateUserWithEmail(parsed.data);
     return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);

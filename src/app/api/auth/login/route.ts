@@ -2,7 +2,7 @@ import {
   authLoginSchema,
   getCurrentSession,
   getDefaultAppRoute,
-  loginWithEmailAndPassword,
+  loginWithEmail,
 } from "@/features/auth";
 import { createApiSuccessResponse, handleApiError, readJsonBody } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await loginWithEmailAndPassword(request, parsed.data);
+    const result = await loginWithEmail(parsed.data);
     return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);

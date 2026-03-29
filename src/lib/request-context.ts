@@ -1,7 +1,3 @@
-type HeaderReader = {
-  get(name: string): string | null;
-};
-
 export type RequestClientContext = {
   deviceType: string | null;
   ipAddress: string | null;
@@ -9,8 +5,8 @@ export type RequestClientContext = {
   userAgent: string | null;
 };
 
-function readHeaderValue(headers: HeaderReader, key: string) {
-  const value = headers.get(key)?.trim();
+function readHeaderValue(headers: Headers, name: string) {
+  const value = headers.get(name)?.trim();
   return value && value.length > 0 ? value : null;
 }
 
@@ -22,18 +18,18 @@ function detectDeviceType(userAgent: string | null) {
   const normalized = userAgent.toLowerCase();
 
   if (normalized.includes("ipad") || normalized.includes("tablet")) {
-    return "TABLET";
+    return "태블릿";
   }
 
   if (
-    normalized.includes("mobile") ||
+    normalized.includes("mobi") ||
     normalized.includes("iphone") ||
     normalized.includes("android")
   ) {
-    return "MOBILE";
+    return "모바일";
   }
 
-  return "DESKTOP";
+  return "데스크톱";
 }
 
 function detectPlatform(userAgent: string | null) {
@@ -43,50 +39,38 @@ function detectPlatform(userAgent: string | null) {
 
   const normalized = userAgent.toLowerCase();
 
-  if (normalized.includes("windows")) {
-    return "WINDOWS";
+  if (normalized.includes("android")) {
+    return "안드로이드";
   }
 
   if (normalized.includes("iphone") || normalized.includes("ipad") || normalized.includes("ios")) {
-    return "IOS";
+    return "iOS";
   }
 
-  if (normalized.includes("android")) {
-    return "ANDROID";
+  if (normalized.includes("windows")) {
+    return "윈도우";
   }
 
   if (normalized.includes("mac os") || normalized.includes("macintosh")) {
-    return "MAC";
+    return "맥";
   }
 
   if (normalized.includes("linux")) {
-    return "LINUX";
+    return "리눅스";
   }
 
-  return "OTHER";
+  return "기타";
 }
 
-function readForwardedIp(headers: HeaderReader) {
-  const forwardedFor = readHeaderValue(headers, "x-forwarded-for");
-
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() ?? null;
-  }
-
-  return (
-    readHeaderValue(headers, "x-real-ip") ??
-    readHeaderValue(headers, "cf-connecting-ip") ??
-    null
-  );
-}
-
-export function readRequestClientContext(source: HeaderReader | Request): RequestClientContext {
+export function readRequestClientContext(source: Headers | Request): RequestClientContext {
   const headers = source instanceof Request ? source.headers : source;
+  const forwardedFor = readHeaderValue(headers, "x-forwarded-for");
+  const realIp = readHeaderValue(headers, "x-real-ip");
   const userAgent = readHeaderValue(headers, "user-agent");
 
   return {
     deviceType: detectDeviceType(userAgent),
-    ipAddress: readForwardedIp(headers),
+    ipAddress: forwardedFor?.split(",")[0]?.trim() ?? realIp,
     platform: detectPlatform(userAgent),
     userAgent,
   };

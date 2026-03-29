@@ -3,146 +3,99 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { JsonObject } from "@/types";
-import type { AppSession, UserRole } from "@/features/auth/types";
+import type { AppSession } from "@/features/auth/types";
 import { isAdminRole } from "@/features/auth/utils";
 import { runBackgroundTask } from "@/lib/background-task";
 import { ApiError } from "@/lib/errors";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 import type {
-  ActivityUserSummary,
+  ActivityPaginationInput,
   AuthActivityLogItem,
   NotificationLogItem,
-  PaginatedActivityLogs,
-  PaginationInput,
-  QueueNotificationLogInput,
+  PaginatedAuthActivityLogs,
+  PaginatedNotificationLogs,
+  PaginatedUserActivityLogs,
+  QueueNotificationInput,
   RegisterUserDeviceInput,
   TrackAuthActivityInput,
   TrackUserActivityInput,
   UserActivityLogItem,
 } from "./types";
 
-const LAST_ACTIVE_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
-
 type ActivityUserRow = {
   department_id: string | null;
-  email: string | null;
   id: string;
   name: string;
   profile_name: string | null;
-  role: UserRole;
-  title: string | null;
 };
 
-type ActivityDepartmentRow = {
+type DepartmentRow = {
   id: string;
   name: string;
 };
 
-type DirectiveSummaryRow = {
-  directive_no: string;
-  id: string;
-  title: string;
-};
+function buildDisplayName(user: Pick<ActivityUserRow, "name" | "profile_name"> | null | undefined) {
+  if (!user) {
+    return null;
+  }
 
-function mapSupabaseActivityError(error: unknown, message: string, code: string) {
-  return new ApiError(500, message, error, code);
-}
-
-function normalizeSearch(search: string | null | undefined) {
-  return search?.trim() ?? "";
-}
-
-function buildDisplayName(user: Pick<ActivityUserRow, "name" | "profile_name">) {
   return user.profile_name?.trim() || user.name;
 }
 
-function ensureJsonObject(value: unknown): JsonObject {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
-  }
-
-  return value as JsonObject;
+function normalizeSearch(search: string | undefined) {
+  const value = search?.trim();
+  return value && value.length > 0 ? value : null;
 }
 
-async function loadUserSummaryMap(client: SupabaseClient, userIds: Array<string | null | undefined>) {
-  const ids = Array.from(new Set(userIds.filter(Boolean) as string[]));
+function buildContainsPattern(search: string) {
+  return `*${search.replace(/[,*()]/g, " ").trim()}*`;
+}
 
-  if (ids.length === 0) {
-    return new Map<string, ActivityUserSummary>();
+function buildPagination(input: ActivityPaginationInput, total: number) {
+  return {
+    page: input.page,
+    pageSize: input.pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / input.pageSize)),
+  };
+}
+
+async function loadUsersMap(client: SupabaseClient, userIds: string[]) {
+  if (userIds.length === 0) {
+    return new Map<string, ActivityUserRow>();
   }
 
   const { data, error } = await client
     .from("users")
-    .select("id, name, profile_name, email, role, title, department_id")
-    .in("id", ids);
+    .select("id, name, profile_name, department_id")
+    .in("id", userIds);
 
   if (error) {
-    throw mapSupabaseActivityError(error, "사용자 정보를 불러오지 못했습니다.", "ACTIVITY_USER_LOAD_FAILED");
+    throw new ApiError(500, "사용자 정보를 불러오지 못했습니다.", error, "ACTIVITY_USERS_LOAD_FAILED");
   }
 
-  const rows = (data ?? []) as ActivityUserRow[];
-  const departmentIds = Array.from(new Set(rows.map((row) => row.department_id).filter(Boolean) as string[]));
-  const departmentMap = await loadDepartmentMap(client, departmentIds);
-
-  return new Map(
-    rows.map((row) => [
-      row.id,
-      {
-        departmentId: row.department_id,
-        departmentName: row.department_id ? departmentMap.get(row.department_id)?.name ?? null : null,
-        displayName: buildDisplayName(row),
-        email: row.email,
-        role: row.role,
-        title: row.title,
-        userId: row.id,
-      } satisfies ActivityUserSummary,
-    ]),
-  );
+  return new Map(((data ?? []) as ActivityUserRow[]).map((user) => [user.id, user]));
 }
 
-async function loadDepartmentMap(client: SupabaseClient, departmentIds: string[]) {
+async function loadDepartmentsMap(client: SupabaseClient, departmentIds: string[]) {
   if (departmentIds.length === 0) {
-    return new Map<string, ActivityDepartmentRow>();
-  }
-
-  const { data, error } = await client.from("departments").select("id, name").in("id", departmentIds);
-
-  if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "부서 정보를 불러오지 못했습니다.",
-      "ACTIVITY_DEPARTMENT_LOAD_FAILED",
-    );
-  }
-
-  return new Map(((data ?? []) as ActivityDepartmentRow[]).map((row) => [row.id, row]));
-}
-
-async function loadDirectiveSummaryMap(client: SupabaseClient, directiveIds: Array<string | null | undefined>) {
-  const ids = Array.from(new Set(directiveIds.filter(Boolean) as string[]));
-
-  if (ids.length === 0) {
-    return new Map<string, DirectiveSummaryRow>();
+    return new Map<string, DepartmentRow>();
   }
 
   const { data, error } = await client
-    .from("directives")
-    .select("id, directive_no, title")
-    .in("id", ids);
+    .from("departments")
+    .select("id, name")
+    .in("id", departmentIds);
 
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "지시 요약 정보를 불러오지 못했습니다.",
-      "ACTIVITY_DIRECTIVE_LOAD_FAILED",
-    );
+    throw new ApiError(500, "부서 정보를 불러오지 못했습니다.", error, "ACTIVITY_DEPARTMENTS_LOAD_FAILED");
   }
 
-  return new Map(((data ?? []) as DirectiveSummaryRow[]).map((row) => [row.id, row]));
+  return new Map(((data ?? []) as DepartmentRow[]).map((department) => [department.id, department]));
 }
 
-async function resolveAccessibleUserIds(client: SupabaseClient, session: AppSession) {
+async function resolveVisibleUserIds(client: SupabaseClient, session: AppSession) {
   if (isAdminRole(session.role)) {
     return null;
   }
@@ -155,277 +108,240 @@ async function resolveAccessibleUserIds(client: SupabaseClient, session: AppSess
       .eq("is_active", true);
 
     if (error) {
-      throw mapSupabaseActivityError(
-        error,
-        "부서 사용자 범위를 확인하지 못했습니다.",
-        "ACTIVITY_SCOPE_LOAD_FAILED",
-      );
+      throw new ApiError(500, "부서 사용자 범위를 확인하지 못했습니다.", error, "ACTIVITY_SCOPE_LOAD_FAILED");
     }
 
-    return (data ?? []).map((row) => row.id as string);
+    return (data ?? []).map((item) => item.id as string);
   }
 
   return [session.userId];
 }
 
-function applyUserScope<TQuery extends { in: (column: string, values: string[]) => TQuery }>(
-  query: TQuery,
-  userIds: string[] | null,
-) {
-  if (!userIds) {
-    return query;
-  }
-
-  return query.in("user_id", userIds);
-}
-
-function buildPagination<T>(items: T[], page: number, pageSize: number, total: number): PaginatedActivityLogs<T> {
-  return {
-    items,
-    pagination: {
-      page,
-      pageSize,
-      total,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    },
-  };
-}
-
-export async function touchUserLastActiveAt(options: {
-  client?: SupabaseClient;
-  force?: boolean;
-  lastActiveAt?: string | null;
-  userId: string;
-}) {
-  const shouldUpdate =
-    options.force ||
-    !options.lastActiveAt ||
-    Date.now() - new Date(options.lastActiveAt).getTime() >= LAST_ACTIVE_UPDATE_INTERVAL_MS;
-
-  if (!shouldUpdate) {
-    return false;
-  }
-
-  const client = options.client ?? createSupabaseServerClient();
-  const { error } = await client
+async function touchUserLastActiveAt(client: SupabaseClient, userId: string, minIntervalMs = 5 * 60 * 1000) {
+  const { data, error } = await client
     .from("users")
-    .update({ last_active_at: new Date().toISOString() })
-    .eq("id", options.userId);
+    .select("last_active_at")
+    .eq("id", userId)
+    .maybeSingle<{ last_active_at: string | null }>();
 
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "최근 활동 시각을 갱신하지 못했습니다.",
-      "USER_LAST_ACTIVE_UPDATE_FAILED",
-    );
+    throw new ApiError(500, "마지막 활동 시각을 확인하지 못했습니다.", error, "USER_LAST_ACTIVE_LOAD_FAILED");
   }
 
-  return true;
+  const lastActiveAt = data?.last_active_at ? new Date(data.last_active_at).getTime() : 0;
+
+  if (Date.now() - lastActiveAt < minIntervalMs) {
+    return;
+  }
+
+  const { error: updateError } = await client
+    .from("users")
+    .update({ last_active_at: new Date().toISOString() })
+    .eq("id", userId);
+
+  if (updateError) {
+    throw new ApiError(500, "마지막 활동 시각을 갱신하지 못했습니다.", updateError, "USER_LAST_ACTIVE_UPDATE_FAILED");
+  }
+}
+
+async function ensureNotificationAccess(client: SupabaseClient, session: AppSession, notificationId: string) {
+  const { data, error } = await client
+    .from("notification_logs")
+    .select("id, user_id")
+    .eq("id", notificationId)
+    .maybeSingle<{ id: string; user_id: string }>();
+
+  if (error) {
+    throw new ApiError(500, "알림 로그를 확인하지 못했습니다.", error, "NOTIFICATION_LOG_LOAD_FAILED");
+  }
+
+  if (!data) {
+    throw new ApiError(404, "알림 로그를 찾을 수 없습니다.", null, "NOTIFICATION_LOG_NOT_FOUND");
+  }
+
+  if (isAdminRole(session.role)) {
+    return data;
+  }
+
+  const visibleUserIds = await resolveVisibleUserIds(client, session);
+
+  if (!visibleUserIds?.includes(data.user_id)) {
+    throw new ApiError(403, "이 알림 로그를 처리할 권한이 없습니다.", null, "NOTIFICATION_LOG_ACCESS_DENIED");
+  }
+
+  return data;
 }
 
 export async function trackAuthActivity(input: TrackAuthActivityInput) {
   const client = createSupabaseServerClient();
   const { error } = await client.from("auth_activity_logs").insert({
-    device_type: input.deviceType ?? null,
+    device_type: input.requestContext?.deviceType ?? null,
     email: input.email ?? null,
     event_result: input.eventResult,
     event_type: input.eventType,
-    happened_at: input.happenedAt ?? new Date().toISOString(),
-    ip_address: input.ipAddress ?? null,
-    platform: input.platform ?? null,
-    user_agent: input.userAgent ?? null,
+    happened_at: new Date().toISOString(),
+    ip_address: input.requestContext?.ipAddress ?? null,
+    platform: input.requestContext?.platform ?? null,
+    user_agent: input.requestContext?.userAgent ?? null,
     user_id: input.userId ?? null,
   });
 
   if (error) {
-    throw mapSupabaseActivityError(error, "접속 로그를 기록하지 못했습니다.", "AUTH_ACTIVITY_WRITE_FAILED");
+    throw new ApiError(500, "접속 로그를 기록하지 못했습니다.", error, "AUTH_ACTIVITY_LOG_WRITE_FAILED");
   }
-}
-
-export function trackAuthActivityAsync(input: TrackAuthActivityInput) {
-  runBackgroundTask("auth-activity", () => trackAuthActivity(input));
 }
 
 export async function trackUserActivity(input: TrackUserActivityInput) {
   const client = createSupabaseServerClient();
   const { error } = await client.from("user_activity_logs").insert({
     activity_type: input.activityType,
-    department_id: input.departmentId ?? null,
-    happened_at: input.happenedAt ?? new Date().toISOString(),
+    department_id: input.session.departmentId,
+    happened_at: new Date().toISOString(),
     metadata: input.metadata ?? {},
     page_path: input.pagePath ?? null,
     target_id: input.targetId ?? null,
     target_type: input.targetType ?? null,
-    user_id: input.userId,
+    user_id: input.session.userId,
   });
 
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "사용자 활동 로그를 기록하지 못했습니다.",
-      "USER_ACTIVITY_WRITE_FAILED",
-    );
+    throw new ApiError(500, "사용자 활동 로그를 기록하지 못했습니다.", error, "USER_ACTIVITY_LOG_WRITE_FAILED");
   }
+
+  await touchUserLastActiveAt(client, input.session.userId);
 }
 
-export function trackUserActivityAsync(input: TrackUserActivityInput) {
-  runBackgroundTask("user-activity", () => trackUserActivity(input));
-}
-
-export async function registerUserDevice(session: AppSession, input: RegisterUserDeviceInput) {
+export async function registerUserDevice(input: RegisterUserDeviceInput) {
   const client = createSupabaseServerClient();
-  const happenedAt = new Date().toISOString();
+  const now = new Date().toISOString();
   const { data, error } = await client
     .from("user_devices")
     .upsert(
       {
         device_key: input.deviceKey,
         device_type: input.deviceType,
-        last_seen_at: happenedAt,
+        last_seen_at: now,
         notification_permission: input.notificationPermission,
         platform: input.platform,
         push_token: input.pushToken ?? null,
-        user_id: session.userId,
+        updated_at: now,
+        user_id: input.session.userId,
       },
-      { onConflict: "user_id,device_key" },
+      {
+        onConflict: "user_id,device_key",
+      },
     )
     .select("*")
     .single();
 
   if (error) {
-    throw mapSupabaseActivityError(error, "디바이스 정보를 저장하지 못했습니다.", "USER_DEVICE_UPSERT_FAILED");
+    throw new ApiError(500, "디바이스 정보를 저장하지 못했습니다.", error, "USER_DEVICE_UPSERT_FAILED");
   }
 
-  await touchUserLastActiveAt({
-    client,
-    force: true,
-    userId: session.userId,
-  });
+  await touchUserLastActiveAt(client, input.session.userId);
 
   return data;
 }
 
-export function registerUserDeviceAsync(session: AppSession, input: RegisterUserDeviceInput) {
-  runBackgroundTask("user-device", () => registerUserDevice(session, input));
-}
+export async function queueNotificationLogs(input: QueueNotificationInput) {
+  const client = createSupabaseServerClient();
+  const uniqueUserIds = Array.from(new Set(input.userIds.filter(Boolean)));
 
-export async function queueNotificationLogs(input: QueueNotificationLogInput) {
-  const userIds = Array.from(new Set(input.userIds.filter(Boolean)));
-
-  if (userIds.length === 0) {
-    return 0;
+  if (uniqueUserIds.length === 0) {
+    return [];
   }
 
-  const client = createSupabaseServerClient();
-  const now = new Date().toISOString();
-  const { error } = await client.from("notification_logs").insert(
-    userIds.map((userId) => ({
-      body: input.body,
-      channel: input.channel ?? "PUSH",
-      delivery_status: input.deliveryStatus ?? "PENDING",
-      directive_id: input.directiveId ?? null,
-      metadata: input.metadata ?? {},
-      notification_type: input.notificationType,
-      sent_at: now,
-      title: input.title,
-      user_id: userId,
-    })),
-  );
+  const { data, error } = await client
+    .from("notification_logs")
+    .insert(
+      uniqueUserIds.map((userId) => ({
+        body: input.body,
+        channel: input.channel ?? "PUSH",
+        delivery_status: input.deliveryStatus ?? "PENDING",
+        directive_id: input.directiveId ?? null,
+        metadata: input.metadata ?? {},
+        notification_type: input.notificationType,
+        sent_at: new Date().toISOString(),
+        title: input.title,
+        user_id: userId,
+      })),
+    )
+    .select("id");
 
   if (error) {
-    throw mapSupabaseActivityError(error, "알림 로그를 적재하지 못했습니다.", "NOTIFICATION_LOG_WRITE_FAILED");
+    throw new ApiError(500, "알림 로그를 기록하지 못했습니다.", error, "NOTIFICATION_LOG_WRITE_FAILED");
   }
 
-  return userIds.length;
-}
-
-export function queueNotificationLogsAsync(input: QueueNotificationLogInput) {
-  runBackgroundTask("notification-log", () => queueNotificationLogs(input));
+  return data ?? [];
 }
 
 export async function markNotificationReadAsSession(session: AppSession, notificationId: string) {
   const client = createSupabaseServerClient();
-  let query = client
+  await ensureNotificationAccess(client, session, notificationId);
+  const now = new Date().toISOString();
+  const { error } = await client
     .from("notification_logs")
     .update({
-      delivery_status: "READ",
-      read_at: new Date().toISOString(),
+      delivery_status: "SENT",
+      read_at: now,
     })
     .eq("id", notificationId);
 
-  if (!isAdminRole(session.role)) {
-    query = query.eq("user_id", session.userId);
-  }
-
-  const { error } = await query;
-
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "알림 읽음 상태를 저장하지 못했습니다.",
-      "NOTIFICATION_READ_UPDATE_FAILED",
-    );
+    throw new ApiError(500, "알림 읽음 시각을 저장하지 못했습니다.", error, "NOTIFICATION_READ_UPDATE_FAILED");
   }
 }
 
 export async function markNotificationClickedAsSession(session: AppSession, notificationId: string) {
   const client = createSupabaseServerClient();
-  let query = client
+  await ensureNotificationAccess(client, session, notificationId);
+  const now = new Date().toISOString();
+  const { error } = await client
     .from("notification_logs")
     .update({
-      clicked_at: new Date().toISOString(),
+      clicked_at: now,
+      delivery_status: "SENT",
     })
     .eq("id", notificationId);
 
-  if (!isAdminRole(session.role)) {
-    query = query.eq("user_id", session.userId);
-  }
-
-  const { error } = await query;
-
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "알림 클릭 기록을 저장하지 못했습니다.",
-      "NOTIFICATION_CLICK_UPDATE_FAILED",
-    );
+    throw new ApiError(500, "알림 클릭 시각을 저장하지 못했습니다.", error, "NOTIFICATION_CLICK_UPDATE_FAILED");
   }
 }
 
 export async function listAuthActivityLogsForSession(
   session: AppSession,
-  filters: PaginationInput,
-): Promise<PaginatedActivityLogs<AuthActivityLogItem>> {
+  filters: ActivityPaginationInput,
+): Promise<PaginatedAuthActivityLogs> {
   const client = createSupabaseServerClient();
-  const scopedUserIds = await resolveAccessibleUserIds(client, session);
-
-  if (scopedUserIds && scopedUserIds.length === 0) {
-    return buildPagination([], filters.page, filters.pageSize, 0);
-  }
-
+  const visibleUserIds = await resolveVisibleUserIds(client, session);
+  const search = normalizeSearch(filters.search);
+  const from = (filters.page - 1) * filters.pageSize;
+  const to = from + filters.pageSize - 1;
   let query = client
     .from("auth_activity_logs")
     .select("*", { count: "exact" })
     .order("happened_at", { ascending: false });
 
-  query = applyUserScope(query, scopedUserIds);
+  if (visibleUserIds && visibleUserIds.length === 0) {
+    return {
+      items: [],
+      pagination: buildPagination(filters, 0),
+    };
+  }
 
-  const search = normalizeSearch(filters.search);
+  if (visibleUserIds) {
+    query = query.in("user_id", visibleUserIds);
+  }
 
   if (search) {
     query = query.ilike("email", `%${search}%`);
   }
 
-  const from = (filters.page - 1) * filters.pageSize;
-  const to = from + filters.pageSize - 1;
   const { count, data, error } = await query.range(from, to);
 
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "접속 로그를 불러오지 못했습니다.",
-      "AUTH_ACTIVITY_LIST_FAILED",
-    );
+    throw new ApiError(500, "접속 로그를 불러오지 못했습니다.", error, "AUTH_ACTIVITY_LOG_LIST_FAILED");
   }
 
   const rows = (data ?? []) as Array<{
@@ -440,63 +356,73 @@ export async function listAuthActivityLogsForSession(
     user_agent: string | null;
     user_id: string | null;
   }>;
-  const userMap = await loadUserSummaryMap(client, rows.map((row) => row.user_id));
-
-  return buildPagination(
-    rows.map((row) => ({
-      deviceType: row.device_type,
-      email: row.email,
-      eventResult: row.event_result,
-      eventType: row.event_type,
-      happenedAt: row.happened_at,
-      id: row.id,
-      ipAddress: row.ip_address,
-      platform: row.platform,
-      user: row.user_id ? userMap.get(row.user_id) ?? null : null,
-      userAgent: row.user_agent,
-    })),
-    filters.page,
-    filters.pageSize,
-    count ?? 0,
+  const userIds = rows.map((row) => row.user_id).filter((value): value is string => Boolean(value));
+  const usersMap = await loadUsersMap(client, userIds);
+  const departmentIds = Array.from(
+    new Set(Array.from(usersMap.values()).map((user) => user.department_id).filter((value): value is string => Boolean(value))),
   );
+  const departmentsMap = await loadDepartmentsMap(client, departmentIds);
+
+  return {
+    items: rows.map((row) => {
+      const user = row.user_id ? usersMap.get(row.user_id) ?? null : null;
+      const department = user?.department_id ? departmentsMap.get(user.department_id) ?? null : null;
+
+      return {
+        departmentName: department?.name ?? null,
+        deviceType: row.device_type,
+        email: row.email,
+        eventResult: row.event_result,
+        eventType: row.event_type,
+        happenedAt: row.happened_at,
+        id: row.id,
+        ipAddress: row.ip_address,
+        platform: row.platform,
+        userAgent: row.user_agent,
+        userId: row.user_id,
+        userName: buildDisplayName(user),
+      };
+    }),
+    pagination: buildPagination(filters, count ?? 0),
+  };
 }
 
 export async function listUserActivityLogsForSession(
   session: AppSession,
-  filters: PaginationInput,
-): Promise<PaginatedActivityLogs<UserActivityLogItem>> {
+  filters: ActivityPaginationInput,
+): Promise<PaginatedUserActivityLogs> {
   const client = createSupabaseServerClient();
-  const scopedUserIds = await resolveAccessibleUserIds(client, session);
-
-  if (scopedUserIds && scopedUserIds.length === 0) {
-    return buildPagination([], filters.page, filters.pageSize, 0);
-  }
-
+  const visibleUserIds = await resolveVisibleUserIds(client, session);
+  const search = normalizeSearch(filters.search);
+  const from = (filters.page - 1) * filters.pageSize;
+  const to = from + filters.pageSize - 1;
   let query = client
     .from("user_activity_logs")
     .select("*", { count: "exact" })
     .order("happened_at", { ascending: false });
 
-  query = applyUserScope(query, scopedUserIds);
+  if (visibleUserIds && visibleUserIds.length === 0) {
+    return {
+      items: [],
+      pagination: buildPagination(filters, 0),
+    };
+  }
 
-  const search = normalizeSearch(filters.search);
+  if (visibleUserIds) {
+    query = query.in("user_id", visibleUserIds);
+  }
 
   if (search) {
+    const pattern = buildContainsPattern(search);
     query = query.or(
-      [`activity_type.ilike.*${search}*`, `page_path.ilike.*${search}*`, `target_type.ilike.*${search}*`].join(","),
+      [`activity_type.ilike.${pattern}`, `page_path.ilike.${pattern}`, `target_type.ilike.${pattern}`].join(","),
     );
   }
 
-  const from = (filters.page - 1) * filters.pageSize;
-  const to = from + filters.pageSize - 1;
   const { count, data, error } = await query.range(from, to);
 
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "사용자 활동 로그를 불러오지 못했습니다.",
-      "USER_ACTIVITY_LIST_FAILED",
-    );
+    throw new ApiError(500, "활동 로그를 불러오지 못했습니다.", error, "USER_ACTIVITY_LOG_LIST_FAILED");
   }
 
   const rows = (data ?? []) as Array<{
@@ -504,67 +430,74 @@ export async function listUserActivityLogsForSession(
     department_id: string | null;
     happened_at: string;
     id: string;
-    metadata: unknown;
+    metadata: JsonObject | null;
     page_path: string | null;
     target_id: string | null;
     target_type: string | null;
     user_id: string;
   }>;
-  const userMap = await loadUserSummaryMap(client, rows.map((row) => row.user_id));
+  const usersMap = await loadUsersMap(
+    client,
+    Array.from(new Set(rows.map((row) => row.user_id))),
+  );
+  const departmentIds = Array.from(
+    new Set(rows.map((row) => row.department_id).filter((value): value is string => Boolean(value))),
+  );
+  const departmentsMap = await loadDepartmentsMap(client, departmentIds);
 
-  return buildPagination(
-    rows.map((row) => ({
+  return {
+    items: rows.map((row) => ({
       activityType: row.activity_type,
+      departmentName: row.department_id ? departmentsMap.get(row.department_id)?.name ?? null : null,
       happenedAt: row.happened_at,
       id: row.id,
-      metadata: ensureJsonObject(row.metadata),
+      metadata: row.metadata ?? {},
       pagePath: row.page_path,
       targetId: row.target_id,
       targetType: row.target_type,
-      user: userMap.get(row.user_id) ?? null,
+      userId: row.user_id,
+      userName: buildDisplayName(usersMap.get(row.user_id)),
     })),
-    filters.page,
-    filters.pageSize,
-    count ?? 0,
-  );
+    pagination: buildPagination(filters, count ?? 0),
+  };
 }
 
 export async function listNotificationLogsForSession(
   session: AppSession,
-  filters: PaginationInput,
-): Promise<PaginatedActivityLogs<NotificationLogItem>> {
+  filters: ActivityPaginationInput,
+): Promise<PaginatedNotificationLogs> {
   const client = createSupabaseServerClient();
-  const scopedUserIds = await resolveAccessibleUserIds(client, session);
-
-  if (scopedUserIds && scopedUserIds.length === 0) {
-    return buildPagination([], filters.page, filters.pageSize, 0);
-  }
-
+  const visibleUserIds = await resolveVisibleUserIds(client, session);
+  const search = normalizeSearch(filters.search);
+  const from = (filters.page - 1) * filters.pageSize;
+  const to = from + filters.pageSize - 1;
   let query = client
     .from("notification_logs")
     .select("*", { count: "exact" })
     .order("sent_at", { ascending: false });
 
-  query = applyUserScope(query, scopedUserIds);
+  if (visibleUserIds && visibleUserIds.length === 0) {
+    return {
+      items: [],
+      pagination: buildPagination(filters, 0),
+    };
+  }
 
-  const search = normalizeSearch(filters.search);
+  if (visibleUserIds) {
+    query = query.in("user_id", visibleUserIds);
+  }
 
   if (search) {
+    const pattern = buildContainsPattern(search);
     query = query.or(
-      [`title.ilike.*${search}*`, `body.ilike.*${search}*`, `notification_type.ilike.*${search}*`].join(","),
+      [`title.ilike.${pattern}`, `body.ilike.${pattern}`, `notification_type.ilike.${pattern}`].join(","),
     );
   }
 
-  const from = (filters.page - 1) * filters.pageSize;
-  const to = from + filters.pageSize - 1;
   const { count, data, error } = await query.range(from, to);
 
   if (error) {
-    throw mapSupabaseActivityError(
-      error,
-      "알림 로그를 불러오지 못했습니다.",
-      "NOTIFICATION_LOG_LIST_FAILED",
-    );
+    throw new ApiError(500, "알림 로그를 불러오지 못했습니다.", error, "NOTIFICATION_LOG_LIST_FAILED");
   }
 
   const rows = (data ?? []) as Array<{
@@ -574,41 +507,44 @@ export async function listNotificationLogsForSession(
     delivery_status: NotificationLogItem["deliveryStatus"];
     directive_id: string | null;
     id: string;
-    metadata: unknown;
+    metadata: JsonObject | null;
     notification_type: NotificationLogItem["notificationType"];
     read_at: string | null;
     sent_at: string;
     title: string;
     user_id: string;
   }>;
-  const [userMap, directiveMap] = await Promise.all([
-    loadUserSummaryMap(client, rows.map((row) => row.user_id)),
-    loadDirectiveSummaryMap(client, rows.map((row) => row.directive_id)),
-  ]);
-
-  return buildPagination(
-    rows.map((row) => {
-      const directive = row.directive_id ? directiveMap.get(row.directive_id) ?? null : null;
-
-      return {
-        body: row.body,
-        channel: row.channel,
-        clickedAt: row.clicked_at,
-        deliveryStatus: row.delivery_status,
-        directiveId: row.directive_id,
-        directiveNo: directive?.directive_no ?? null,
-        directiveTitle: directive?.title ?? null,
-        id: row.id,
-        metadata: ensureJsonObject(row.metadata),
-        notificationType: row.notification_type,
-        readAt: row.read_at,
-        sentAt: row.sent_at,
-        title: row.title,
-        user: userMap.get(row.user_id) ?? null,
-      } satisfies NotificationLogItem;
-    }),
-    filters.page,
-    filters.pageSize,
-    count ?? 0,
+  const usersMap = await loadUsersMap(
+    client,
+    Array.from(new Set(rows.map((row) => row.user_id))),
   );
+
+  return {
+    items: rows.map((row) => ({
+      body: row.body,
+      channel: row.channel,
+      clickedAt: row.clicked_at,
+      deliveryStatus: row.delivery_status,
+      directiveId: row.directive_id,
+      id: row.id,
+      metadata: row.metadata ?? {},
+      notificationType: row.notification_type,
+      readAt: row.read_at,
+      sentAt: row.sent_at,
+      title: row.title,
+      userId: row.user_id,
+      userName: buildDisplayName(usersMap.get(row.user_id)),
+    })),
+    pagination: buildPagination(filters, count ?? 0),
+  };
+}
+
+export function trackUserActivityAsync(input: TrackUserActivityInput) {
+  runBackgroundTask("user-activity-log", () => trackUserActivity(input));
+}
+
+export function queueNotificationLogsAsync(input: QueueNotificationInput) {
+  runBackgroundTask("notification-log-queue", async () => {
+    await queueNotificationLogs(input);
+  });
 }

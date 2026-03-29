@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { ApiResponse } from "@/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { AuthLoginResult, AuthLookupResult, AuthenticatedUserProfile } from "@/features/auth/types";
+import type {
+  ActivationLookupData,
+  AuthLoginResult,
+  AuthenticatedUserProfile,
+} from "@/features/auth/types";
 import { roleLabelMap } from "@/features/auth/utils";
 
 import { Button } from "@/components/ui/button";
@@ -62,7 +66,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [lookupEmail, setLookupEmail] = useState("");
-  const [lookupResult, setLookupResult] = useState<AuthLookupResult | null>(null);
+  const [lookupResult, setLookupResult] = useState<ActivationLookupData | null>(null);
   const [activationPassword, setActivationPassword] = useState("");
   const [activationPasswordConfirm, setActivationPasswordConfirm] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -72,7 +76,7 @@ export function LoginForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  const activationUser = useMemo(() => lookupResult?.user ?? null, [lookupResult]);
+  const activationUser = useMemo(() => lookupResult?.profile ?? null, [lookupResult]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -81,7 +85,7 @@ export function LoginForm() {
 
     if (isRecoveryMode) {
       setMode("recovery");
-      setInfoMessage("재설정 링크를 확인했습니다. 새 비밀번호를 입력해주세요.");
+      setInfoMessage("재설정 링크가 확인되었습니다. 새 비밀번호를 입력해주세요.");
     }
   }, []);
 
@@ -125,23 +129,19 @@ export function LoginForm() {
     setInfoMessage(null);
 
     try {
-      const result = await fetchApi<AuthLookupResult>(
+      const result = await fetchApi<ActivationLookupData>(
         `/api/auth/lookup-user?email=${encodeURIComponent(lookupEmail)}`,
       );
 
       setLookupResult(result);
 
-      if (!result.found || !result.user) {
-        setInfoMessage("해당 이메일로 등록된 활성 사용자 정보를 찾지 못했습니다.");
-        return;
-      }
-
-      if (result.user.isActivated) {
+      if (!result.profile) {
+        setInfoMessage("해당 이메일로 등록된 활성 조직 사용자를 찾지 못했습니다.");
+      } else if (!result.canActivate) {
         setInfoMessage("이미 최초 설정이 완료된 사용자입니다. 로그인 또는 비밀번호 재설정을 이용해주세요.");
-        return;
+      } else {
+        setInfoMessage("조직 기준 정보를 확인했습니다. 비밀번호를 설정하고 시작해주세요.");
       }
-
-      setInfoMessage("조직 기준 정보를 확인했습니다. 비밀번호를 설정하고 시작해주세요.");
     } catch (error) {
       setLookupResult(null);
       setErrorMessage(error instanceof Error ? error.message : "사용자 정보를 확인하지 못했습니다.");
@@ -169,6 +169,7 @@ export function LoginForm() {
         body: JSON.stringify({
           email: lookupEmail,
           password: activationPassword,
+          rememberMe: true,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -201,7 +202,7 @@ export function LoginForm() {
         method: "POST",
       });
 
-      setInfoMessage("입력한 이메일로 비밀번호 재설정 안내를 전송했습니다.");
+      setInfoMessage("입력한 이메일로 비밀번호 재설정 안내를 보냈습니다.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "재설정 요청을 보내지 못했습니다.");
     } finally {
@@ -256,22 +257,22 @@ export function LoginForm() {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <StatusPill tone="default">이메일 로그인</StatusPill>
-            <StatusPill tone="muted">최초 활성화 · 증빙 중심 운영</StatusPill>
+            <StatusPill tone="muted">최초 활성화 · 접속 감사 로그 연동</StatusPill>
           </div>
 
           <div className="space-y-2">
             <CardTitle>운영 통제 시스템 접속</CardTitle>
             <CardDescription>
-              이메일 인증은 Supabase Auth로 처리하고, 조직 정보는 기준 테이블에 연결된 상태로 유지합니다.
+              인증은 이메일과 비밀번호로 처리하고, 이름·부서·역할은 조직 기준 정보와 자동으로 연결합니다.
             </CardDescription>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-4">
             {[
               ["로그인", "이메일과 비밀번호로 바로 접속합니다."],
-              ["최초 설정", "사전 등록된 사용자만 활성화합니다."],
-              ["재설정", "비밀번호 재설정 메일을 요청합니다."],
-              ["자동 로그인", "로그인 상태 유지로 재접속을 단순화합니다."],
+              ["최초 설정", "사전 등록된 사용자만 활성화할 수 있습니다."],
+              ["비밀번호 재설정", "재설정 메일을 요청할 수 있습니다."],
+              ["자동 로그인", "로그인 상태 유지를 선택하면 세션을 이어갑니다."],
             ].map(([title, description]) => (
               <div key={title} className="rounded-[22px] border border-ink-200/80 bg-ink-100/70 px-4 py-4">
                 <p className="text-sm font-semibold text-ink-950">{title}</p>
@@ -336,11 +337,9 @@ export function LoginForm() {
               로그인 상태 유지
             </label>
 
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" block size="lg" isLoading={isPending} loadingLabel="로그인 중">
-                로그인
-              </Button>
-            </div>
+            <Button type="submit" block size="lg" isLoading={isPending} loadingLabel="로그인 중">
+              로그인
+            </Button>
 
             <div className="flex flex-wrap gap-3 text-sm font-semibold text-ink-600">
               <button type="button" onClick={() => switchMode("activate")}>
@@ -357,7 +356,11 @@ export function LoginForm() {
           <div className="space-y-5">
             <form className="space-y-4" onSubmit={handleLookupSubmit}>
               <FieldGroup>
-                <FieldLabel label="이메일" required hint="사전에 조직 기준 사용자로 등록된 이메일만 활성화할 수 있습니다." />
+                <FieldLabel
+                  label="이메일"
+                  required
+                  hint="사전에 조직 사용자로 등록된 이메일만 최초 설정할 수 있습니다."
+                />
                 <Input
                   type="email"
                   value={lookupEmail}
@@ -373,10 +376,14 @@ export function LoginForm() {
 
             {activationUser ? <LookupProfile user={activationUser} /> : null}
 
-            {activationUser && !activationUser.isActivated ? (
+            {activationUser && lookupResult?.canActivate ? (
               <form className="space-y-4" onSubmit={handleActivationSubmit}>
                 <FieldGroup>
-                  <FieldLabel label="비밀번호 설정" required hint="이름, 부서, 직책, 역할은 조직 기준 정보로 고정됩니다." />
+                  <FieldLabel
+                    label="비밀번호 설정"
+                    required
+                    hint="이름, 부서, 직책, 역할은 조직 기준 정보로 고정됩니다."
+                  />
                   <Input
                     type="password"
                     value={activationPassword}
@@ -406,7 +413,11 @@ export function LoginForm() {
         {mode === "reset" ? (
           <form className="space-y-4" onSubmit={handleResetSubmit}>
             <FieldGroup>
-              <FieldLabel label="이메일" required hint="최초 설정이 완료된 사용자에게만 재설정 메일이 발송됩니다." />
+              <FieldLabel
+                label="이메일"
+                required
+                hint="최초 설정이 완료된 사용자에게만 재설정 메일이 발송됩니다."
+              />
               <Input
                 type="email"
                 value={resetEmail}

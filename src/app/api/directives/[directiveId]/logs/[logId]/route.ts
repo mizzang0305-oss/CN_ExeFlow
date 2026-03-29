@@ -118,16 +118,15 @@ export async function PATCH(request: Request, context: DirectiveLogRouteContext)
     if (files.length > 0) {
       trackUserActivityAsync({
         activityType: "ATTACHMENT_UPLOAD",
-        departmentId: session.departmentId,
         metadata: {
           attachmentCount: files.length,
           directiveId,
           logId,
         },
         pagePath: `/directives/${directiveId}`,
+        session,
         targetId: directiveId,
         targetType: "directive",
-        userId: session.userId,
       });
     }
 

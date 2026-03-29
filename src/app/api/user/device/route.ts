@@ -20,12 +20,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await registerUserDevice(session, {
-      deviceKey: parsed.data.deviceKey,
-      deviceType: parsed.data.deviceType,
-      notificationPermission: parsed.data.notificationPermission,
-      platform: parsed.data.platform,
+    const result = await registerUserDevice({
+      ...parsed.data,
       pushToken: parsed.data.pushToken ?? null,
+      session,
     });
 
     return createApiSuccessResponse(result);

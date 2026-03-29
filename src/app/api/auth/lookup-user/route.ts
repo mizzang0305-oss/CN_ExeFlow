@@ -1,4 +1,4 @@
-import { authLookupSchema, lookupUserByEmailForActivation } from "@/features/auth";
+import { authLookupSchema, lookupUserForActivation } from "@/features/auth";
 import { createApiSuccessResponse, handleApiError } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
 
@@ -6,8 +6,9 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const email = new URL(request.url).searchParams.get("email") ?? "";
-    const parsed = authLookupSchema.safeParse({ email });
+    const parsed = authLookupSchema.safeParse(
+      Object.fromEntries(new URL(request.url).searchParams.entries()),
+    );
 
     if (!parsed.success) {
       throw new ApiError(
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const result = await lookupUserByEmailForActivation(parsed.data.email);
+    const result = await lookupUserForActivation(parsed.data.email);
     return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);

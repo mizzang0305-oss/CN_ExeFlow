@@ -52,15 +52,14 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
 
     trackUserActivityAsync({
       activityType: "APPROVAL_CLICK",
-      departmentId: session.departmentId,
       metadata: {
         departmentId: parsed.data.departmentId,
         reason: parsed.data.reason ?? null,
       },
       pagePath: `/directives/${directiveId}`,
+      session,
       targetId: directiveId,
       targetType: "directive",
-      userId: session.userId,
     });
 
     return createApiSuccessResponse({

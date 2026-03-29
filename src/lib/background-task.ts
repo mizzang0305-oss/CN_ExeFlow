@@ -1,7 +1,5 @@
-export function runBackgroundTask(label: string, task: () => Promise<unknown>) {
-  void Promise.resolve()
-    .then(task)
-    .catch((error) => {
-      console.error(`[background:${label}]`, error);
-    });
+export function runBackgroundTask(label: string, task: () => Promise<void>) {
+  void task().catch((error) => {
+    console.error(`[background:${label}]`, error);
+  });
 }

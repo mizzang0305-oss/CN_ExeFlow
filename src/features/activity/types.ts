@@ -1,6 +1,6 @@
 import type { JsonObject } from "@/types";
 
-import type { UserRole } from "@/features/auth/types";
+import type { AppSession } from "@/features/auth/types";
 
 export type AuthActivityEventType =
   | "LOGIN_SUCCESS"
@@ -8,7 +8,7 @@ export type AuthActivityEventType =
   | "LOGOUT"
   | "SESSION_EXPIRED";
 
-export type AuthActivityEventResult = "SUCCESS" | "FAILED" | "EXPIRED";
+export type AuthActivityResult = "SUCCESS" | "FAILED" | "EXPIRED";
 
 export type UserActivityType =
   | "DASHBOARD_VIEW"
@@ -31,58 +31,114 @@ export type NotificationType =
 
 export type NotificationChannel = "PUSH";
 
-export type NotificationDeliveryStatus = "PENDING" | "SENT" | "FAILED" | "READ";
+export type NotificationDeliveryStatus = "PENDING" | "SENT" | "FAILED";
 
-export type NotificationPermissionStatus = "default" | "granted" | "denied" | "unsupported";
+export type NotificationPermissionState = "default" | "denied" | "granted" | "unsupported";
 
-export interface PaginationInput {
+export interface ActivityPaginationInput {
   page: number;
   pageSize: number;
-  search?: string | null;
+  search?: string;
 }
 
-export interface PaginatedActivityLogs<T> {
-  items: T[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
+export interface ActivityPaginationResult {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface AuthActivityLogItem {
+  departmentName: string | null;
+  deviceType: string | null;
+  email: string | null;
+  eventResult: AuthActivityResult;
+  eventType: AuthActivityEventType;
+  happenedAt: string;
+  id: string;
+  ipAddress: string | null;
+  platform: string | null;
+  userAgent: string | null;
+  userId: string | null;
+  userName: string | null;
+}
+
+export interface UserActivityLogItem {
+  activityType: UserActivityType;
+  departmentName: string | null;
+  happenedAt: string;
+  id: string;
+  metadata: JsonObject;
+  pagePath: string | null;
+  targetId: string | null;
+  targetType: string | null;
+  userId: string;
+  userName: string | null;
+}
+
+export interface NotificationLogItem {
+  body: string;
+  channel: NotificationChannel;
+  deliveryStatus: NotificationDeliveryStatus;
+  directiveId: string | null;
+  id: string;
+  metadata: JsonObject;
+  notificationType: NotificationType;
+  readAt: string | null;
+  sentAt: string;
+  title: string;
+  clickedAt: string | null;
+  userId: string;
+  userName: string | null;
+}
+
+export interface PaginatedAuthActivityLogs {
+  items: AuthActivityLogItem[];
+  pagination: ActivityPaginationResult;
+}
+
+export interface PaginatedUserActivityLogs {
+  items: UserActivityLogItem[];
+  pagination: ActivityPaginationResult;
+}
+
+export interface PaginatedNotificationLogs {
+  items: NotificationLogItem[];
+  pagination: ActivityPaginationResult;
 }
 
 export interface TrackAuthActivityInput {
-  deviceType?: string | null;
   email?: string | null;
-  eventResult: AuthActivityEventResult;
+  eventResult: AuthActivityResult;
   eventType: AuthActivityEventType;
-  happenedAt?: string;
-  ipAddress?: string | null;
-  platform?: string | null;
-  userAgent?: string | null;
+  requestContext?: {
+    deviceType?: string | null;
+    ipAddress?: string | null;
+    platform?: string | null;
+    userAgent?: string | null;
+  };
   userId?: string | null;
 }
 
 export interface TrackUserActivityInput {
   activityType: UserActivityType;
-  departmentId?: string | null;
-  happenedAt?: string;
   metadata?: JsonObject;
   pagePath?: string | null;
+  session: AppSession;
   targetId?: string | null;
   targetType?: string | null;
-  userId: string;
 }
 
 export interface RegisterUserDeviceInput {
   deviceKey: string;
   deviceType: string;
-  notificationPermission: NotificationPermissionStatus;
+  notificationPermission: NotificationPermissionState;
   platform: string;
   pushToken?: string | null;
+  session: AppSession;
 }
 
-export interface QueueNotificationLogInput {
+export interface QueueNotificationInput {
   body: string;
   channel?: NotificationChannel;
   deliveryStatus?: NotificationDeliveryStatus;
@@ -93,53 +149,10 @@ export interface QueueNotificationLogInput {
   userIds: string[];
 }
 
-export interface ActivityUserSummary {
-  departmentId: string | null;
-  departmentName: string | null;
-  displayName: string;
-  email: string | null;
-  role: UserRole;
-  title: string | null;
-  userId: string;
-}
-
-export interface AuthActivityLogItem {
-  deviceType: string | null;
-  email: string | null;
-  eventResult: AuthActivityEventResult;
-  eventType: AuthActivityEventType;
-  happenedAt: string;
-  id: string;
-  ipAddress: string | null;
-  platform: string | null;
-  user: ActivityUserSummary | null;
-  userAgent: string | null;
-}
-
-export interface UserActivityLogItem {
-  activityType: UserActivityType;
-  happenedAt: string;
-  id: string;
-  metadata: JsonObject;
-  pagePath: string | null;
-  targetId: string | null;
-  targetType: string | null;
-  user: ActivityUserSummary | null;
-}
-
-export interface NotificationLogItem {
-  body: string;
-  channel: NotificationChannel;
-  clickedAt: string | null;
-  deliveryStatus: NotificationDeliveryStatus;
-  directiveId: string | null;
-  directiveNo: string | null;
-  directiveTitle: string | null;
-  id: string;
-  metadata: JsonObject;
-  notificationType: NotificationType;
-  readAt: string | null;
-  sentAt: string;
-  title: string;
-  user: ActivityUserSummary | null;
+export interface DeviceRegistrationPayload {
+  deviceKey: string;
+  deviceType: string;
+  notificationPermission: NotificationPermissionState;
+  platform: string;
+  pushToken?: string | null;
 }

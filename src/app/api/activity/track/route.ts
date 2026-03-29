@@ -1,6 +1,5 @@
-import type { JsonObject } from "@/types";
 import { requireCurrentSession } from "@/features/auth";
-import { trackUserActivityAsync, trackUserActivitySchema } from "@/features/activity";
+import { trackUserActivity, trackUserActivitySchema } from "@/features/activity";
 import { createApiSuccessResponse, handleApiError, readJsonBody } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
 
@@ -15,20 +14,15 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       throw new ApiError(
         400,
-        parsed.error.issues[0]?.message ?? "활동 로그 요청이 올바르지 않습니다.",
+        parsed.error.issues[0]?.message ?? "활동 로그 요청을 다시 확인해주세요.",
         parsed.error.flatten(),
-        "USER_ACTIVITY_INVALID",
+        "USER_ACTIVITY_TRACK_INVALID",
       );
     }
 
-    trackUserActivityAsync({
-      activityType: parsed.data.activityType,
-      departmentId: session.departmentId,
-      metadata: parsed.data.metadata as JsonObject | undefined,
-      pagePath: parsed.data.pagePath ?? null,
-      targetId: parsed.data.targetId ?? null,
-      targetType: parsed.data.targetType ?? null,
-      userId: session.userId,
+    await trackUserActivity({
+      ...parsed.data,
+      session,
     });
 
     return createApiSuccessResponse({ tracked: true });

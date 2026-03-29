@@ -131,6 +131,6 @@ execute function public.set_user_devices_updated_at();
 
 comment on column public.users.auth_user_id is 'Supabase Auth 사용자와 public.users를 연결하는 키';
 comment on table public.auth_activity_logs is '로그인, 로그아웃, 세션 만료 등 인증 이벤트 감사 로그';
-comment on table public.user_activity_logs is '주요 화면 진입 및 실행 행동 감사 로그';
-comment on table public.user_devices is '사용자별 디바이스 및 푸시 토큰 상태';
-comment on table public.notification_logs is '푸시/알림 발송 및 열람 이력';
+comment on table public.user_activity_logs is '대시보드 진입과 주요 실행 행동을 기록하는 감사 로그';
+comment on table public.user_devices is '사용자 디바이스와 푸시 토큰 상태';
+comment on table public.notification_logs is '푸시 알림 발송 및 열람 이력';

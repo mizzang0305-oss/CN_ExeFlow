@@ -72,31 +72,29 @@ export async function POST(request: Request, context: DirectiveLogsRouteContext)
 
     trackUserActivityAsync({
       activityType: "DIRECTIVE_LOG_CREATE",
-      departmentId: session.departmentId,
       metadata: {
         directiveId,
         logId: result.id,
         logType: parsed.data.logType,
       },
       pagePath: `/directives/${directiveId}`,
+      session,
       targetId: directiveId,
       targetType: "directive",
-      userId: session.userId,
     });
 
     if (files.length > 0) {
       trackUserActivityAsync({
         activityType: "ATTACHMENT_UPLOAD",
-        departmentId: session.departmentId,
         metadata: {
           attachmentCount: files.length,
           directiveId,
           logId: result.id,
         },
         pagePath: `/directives/${directiveId}`,
+        session,
         targetId: directiveId,
         targetType: "directive",
-        userId: session.userId,
       });
     }
 

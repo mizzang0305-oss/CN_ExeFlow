@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type {
-  NotificationPermissionStatus,
+  NotificationPermissionState,
   UserActivityType,
 } from "./types";
 
@@ -17,31 +17,33 @@ const userActivityTypes: UserActivityType[] = [
   "ATTACHMENT_UPLOAD",
 ];
 
-const notificationPermissionValues: NotificationPermissionStatus[] = [
+const notificationPermissionStates: NotificationPermissionState[] = [
   "default",
-  "granted",
   "denied",
+  "granted",
   "unsupported",
 ];
 
-export const activityPaginationQuerySchema = z.object({
+export const activityPaginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(10).max(100).default(30),
-  search: z.string().trim().max(100).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(30),
+  search: z.string().trim().max(120).optional(),
 });
+
+export const activityPaginationQuerySchema = activityPaginationSchema;
 
 export const trackUserActivitySchema = z.object({
   activityType: z.enum(userActivityTypes),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
   pagePath: z.string().trim().max(240).optional(),
   targetId: z.string().trim().max(120).optional(),
   targetType: z.string().trim().max(80).optional(),
 });
 
 export const registerUserDeviceSchema = z.object({
-  deviceKey: z.string().trim().min(8).max(120),
+  deviceKey: z.string().trim().min(8).max(160),
   deviceType: z.string().trim().min(2).max(40),
-  notificationPermission: z.enum(notificationPermissionValues),
+  notificationPermission: z.enum(notificationPermissionStates),
   platform: z.string().trim().min(2).max(40),
   pushToken: z.string().trim().max(500).nullable().optional(),
 });
