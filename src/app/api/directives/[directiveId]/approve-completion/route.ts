@@ -1,4 +1,5 @@
 import { getCurrentSession } from "@/features/auth";
+import { trackUserActivityAsync } from "@/features/activity";
 import {
   approveDirectiveCompletionAsSession,
   workflowReasonSchema,
@@ -47,6 +48,19 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
       departmentId: parsed.data.departmentId,
       directiveId,
       reason: parsed.data.reason,
+    });
+
+    trackUserActivityAsync({
+      activityType: "APPROVAL_CLICK",
+      departmentId: session.departmentId,
+      metadata: {
+        departmentId: parsed.data.departmentId,
+        reason: parsed.data.reason ?? null,
+      },
+      pagePath: `/directives/${directiveId}`,
+      targetId: directiveId,
+      targetType: "directive",
+      userId: session.userId,
     });
 
     return createApiSuccessResponse({

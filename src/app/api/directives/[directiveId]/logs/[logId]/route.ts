@@ -1,4 +1,5 @@
 import { getCurrentSession } from "@/features/auth";
+import { trackUserActivityAsync } from "@/features/activity";
 import {
   deleteLogSchema,
   logPayloadSchema,
@@ -113,6 +114,22 @@ export async function PATCH(request: Request, context: DirectiveLogRouteContext)
       },
       formData.getAll("attachments"),
     );
+
+    if (files.length > 0) {
+      trackUserActivityAsync({
+        activityType: "ATTACHMENT_UPLOAD",
+        departmentId: session.departmentId,
+        metadata: {
+          attachmentCount: files.length,
+          directiveId,
+          logId,
+        },
+        pagePath: `/directives/${directiveId}`,
+        targetId: directiveId,
+        targetType: "directive",
+        userId: session.userId,
+      });
+    }
 
     return createApiSuccessResponse(result);
   } catch (error) {

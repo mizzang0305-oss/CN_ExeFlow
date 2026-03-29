@@ -1,26 +1,16 @@
-import { loginUsersQuerySchema, listUsersForDepartment } from "@/features/auth";
-import { createApiSuccessResponse, handleApiError } from "@/lib/api";
+import { handleApiError } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const parsed = loginUsersQuerySchema.safeParse(
-      Object.fromEntries(new URL(request.url).searchParams.entries()),
+    throw new ApiError(
+      410,
+      "이전 사용자 선택 로그인은 더 이상 지원하지 않습니다. 이메일 로그인 화면을 이용해주세요.",
+      null,
+      "LEGACY_LOGIN_DISABLED",
     );
-
-    if (!parsed.success) {
-      throw new ApiError(
-        400,
-        parsed.error.issues[0]?.message ?? "부서를 다시 선택해 주세요.",
-        parsed.error.flatten(),
-        "LOGIN_USERS_QUERY_INVALID",
-      );
-    }
-
-    const data = await listUsersForDepartment(parsed.data.departmentId);
-    return createApiSuccessResponse(data);
   } catch (error) {
     return handleApiError(error);
   }

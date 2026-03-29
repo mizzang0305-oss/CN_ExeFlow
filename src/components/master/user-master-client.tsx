@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { readApiResponse } from "@/lib/api";
 import type { UserRole } from "@/features/auth/types";
+import { roleLabelMap } from "@/features/auth/utils";
 import type { MasterDepartmentItem, MasterUserItem } from "@/features/master/types";
 
 import { Button } from "@/components/ui/button";
@@ -151,7 +152,7 @@ export function UserMasterClient({
             >
               {roleOptions.map((role) => (
                 <option key={role} value={role}>
-                  {role}
+                  {roleLabelMap[role]}
                 </option>
               ))}
             </Select>
@@ -220,7 +221,7 @@ export function UserMasterClient({
                 <div>
                   <p className="text-sm font-semibold text-ink-950">{user.displayName}</p>
                   <p className="mt-1 text-sm text-ink-700">
-                    {user.departmentName ?? "미배정"} · {user.role}
+                    {user.departmentName ?? "미배정"} · {roleLabelMap[user.role]}
                   </p>
                   <p className="mt-2 text-xs text-ink-500">
                     {user.email ?? "이메일 없음"}

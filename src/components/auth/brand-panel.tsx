@@ -29,8 +29,8 @@ export function BrandPanel() {
               CN
             </span>
             <div>
-              <p className="text-sm font-semibold tracking-[0.24em] text-brand-100">CN FOOD</p>
-              <p className="text-xs text-white/62">CN EXEFLOW</p>
+              <p className="text-sm font-semibold tracking-[0.24em] text-brand-100">씨엔푸드</p>
+              <p className="text-xs text-white/62">실행 통제 플랫폼</p>
             </div>
             <StatusPill tone="muted">성장하는 운영 플랫폼</StatusPill>
           </div>
@@ -47,18 +47,18 @@ export function BrandPanel() {
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">CONTROL</p>
-              <p className="mt-3 text-2xl font-semibold text-white">5 Step</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">통제 흐름</p>
+              <p className="mt-3 text-2xl font-semibold text-white">5단계</p>
               <p className="mt-2 text-sm leading-6 text-white/68">대표 지시부터 결산까지 흐름을 한 번에 통제합니다.</p>
             </div>
             <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">EVIDENCE</p>
-              <p className="mt-3 text-2xl font-semibold text-white">Live Sync</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">증빙 연결</p>
+              <p className="mt-3 text-2xl font-semibold text-white">실시간 연계</p>
               <p className="mt-2 text-sm leading-6 text-white/68">부서 실행 로그와 증빙이 승인 흐름으로 바로 연결됩니다.</p>
             </div>
             <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">GROWTH</p>
-              <p className="mt-3 text-2xl font-semibold text-white">Weekly Pulse</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">결산 축적</p>
+              <p className="mt-3 text-2xl font-semibold text-white">주간 리듬</p>
               <p className="mt-2 text-sm leading-6 text-white/68">운영 리듬을 남겨 다음 판단을 더 빠르게 만듭니다.</p>
             </div>
           </div>
@@ -66,7 +66,7 @@ export function BrandPanel() {
 
         <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-[30px] border border-white/12 bg-white/10 p-5 backdrop-blur-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-100/70">Execution Flow</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-100/70">실행 흐름</p>
             <div className="mt-4 space-y-3">
               {executionSteps.map((step, index) => (
                 <div
@@ -89,7 +89,7 @@ export function BrandPanel() {
             <div className="brand-dots absolute inset-0 opacity-20" />
             <div className="relative flex h-full flex-col justify-between gap-6">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-100/70">Operations Motif</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-100/70">운영 패턴</p>
                 <p className="mt-3 text-sm leading-7 text-white/68">
                   물류, 현장, 본사 판단이 하나의 선으로 이어지는 운영 패턴을 시각화했습니다.
                 </p>

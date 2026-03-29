@@ -18,36 +18,30 @@ export interface AppSession {
   userId: string;
 }
 
-export interface LoginDepartmentOption {
-  code: string;
-  headUserId: string | null;
-  headUserName: string | null;
-  id: string;
-  name: string;
-  userCount: number;
-}
-
-export interface LoginUserOption {
+export interface AuthenticatedUserProfile {
+  authUserId: string | null;
   departmentId: string | null;
   departmentName: string | null;
   displayName: string;
-  id: string;
+  email: string | null;
+  isActivated: boolean;
   name: string;
   profileName: string | null;
   role: UserRole;
   title: string | null;
+  userId: string;
 }
 
-export interface LoginBootstrapData {
-  departments: LoginDepartmentOption[];
-}
-
-export interface LoginUsersData {
-  department: LoginDepartmentOption | null;
-  users: LoginUserOption[];
+export interface AuthLookupResult {
+  found: boolean;
+  user: AuthenticatedUserProfile | null;
 }
 
 export interface SessionCreateResult {
   redirectTo: string;
   session: AppSession;
+}
+
+export interface AuthLoginResult extends SessionCreateResult {
+  rememberMe: boolean;
 }

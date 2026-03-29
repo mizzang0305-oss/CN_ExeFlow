@@ -2,6 +2,7 @@ import type { AppSession } from "@/features/auth/types";
 import { canAccessApprovalQueue, isAdminRole } from "@/features/auth/utils";
 
 import { AppHeader } from "./app-header";
+import { SessionTelemetryBridge } from "./session-telemetry-bridge";
 import type { NavigationItem } from "./top-nav";
 
 type AppFrameProps = {
@@ -19,6 +20,9 @@ function getNavigationItems(session: AppSession): NavigationItem[] {
       { href: "/directives", label: "지시 관리" },
       { href: "/directives/approval-queue", label: "승인 대기 큐" },
       { href: "/reports", label: "주간 결산" },
+      { href: "/admin/auth-logs", label: "접속 로그" },
+      { href: "/admin/activity-logs", label: "활동 로그" },
+      { href: "/admin/notification-logs", label: "알림 로그" },
       { href: "/admin/master/departments", label: "조직 운영 도구" },
     ];
   }
@@ -64,6 +68,8 @@ export function AppFrame({ children, currentPath, description, session, title }:
         session={session}
         title={title}
       />
+
+      <SessionTelemetryBridge />
 
       <main className="app-container relative z-10 py-6 sm:py-8">{children}</main>
     </div>
