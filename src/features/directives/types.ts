@@ -104,6 +104,7 @@ export interface DirectiveListFilters {
   pageSize: number;
   search?: string;
   status?: DirectiveStatus;
+  urgent?: boolean;
 }
 
 export interface CreateDirectiveInput {
@@ -152,6 +153,8 @@ export interface DirectiveActivitySummary {
 }
 
 export interface DirectiveListItem extends DirectiveActivitySummary {
+  currentDepartmentId: string | null;
+  currentDepartmentStatus: DirectiveStatus | null;
   departmentProgress: Record<DirectiveStatus, number>;
   directiveNo: string;
   dueDate: string | null;
@@ -160,6 +163,7 @@ export interface DirectiveListItem extends DirectiveActivitySummary {
   isUrgent: boolean;
   ownerDepartmentCode: string | null;
   ownerDepartmentName: string | null;
+  ownerUserId: string | null;
   ownerUserName: string | null;
   status: DirectiveStatus;
   supportDepartmentCount: number;
@@ -228,6 +232,8 @@ export interface DirectiveDepartmentProgress {
   assignmentRole: DirectiveDepartmentAssignmentRole;
   assignedAt: string | null;
   attachmentCount: number;
+  canRequestCompletion: boolean;
+  canResumeProgress: boolean;
   departmentCode: string | null;
   departmentHeadId: string | null;
   departmentHeadName: string | null;
@@ -237,7 +243,7 @@ export interface DirectiveDepartmentProgress {
   dueDate: string | null;
   isCurrentDepartment: boolean;
   isPrimary: boolean;
-  isRequestableByCurrentUser: boolean;
+  isReadyForCompletionRequest: boolean;
   lastActivityAt: string | null;
   logCount: number;
 }
@@ -283,6 +289,7 @@ export interface DashboardRecentUpdate {
   directiveNo: string;
   directiveTitle: string;
   happenedAt: string;
+  logId: string;
   logType: DirectiveLogType;
   userName: string | null;
 }
@@ -304,6 +311,24 @@ export interface DepartmentBoardData {
   recentUpdates: DashboardRecentUpdate[];
   urgentItems: DirectiveListItem[];
   waitingApprovalItems: DirectiveListItem[];
+}
+
+export interface DirectiveApprovalQueueItem {
+  attachmentCount: number;
+  departmentId: string;
+  directiveId: string;
+  directiveNo: string;
+  logCount: number;
+  requestDepartmentName: string | null;
+  requestReason: string | null;
+  requestedAt: string;
+  requesterName: string | null;
+  title: string;
+}
+
+export interface DirectiveApprovalQueueData {
+  items: DirectiveApprovalQueueItem[];
+  total: number;
 }
 
 export interface WeeklyReportSummary {

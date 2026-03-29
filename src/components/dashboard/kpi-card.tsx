@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { cn } from "@/lib/utils";
 
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +7,7 @@ import { Card } from "@/components/ui/card";
 
 type KpiCardProps = {
   description?: string;
+  href?: string;
   label: string;
   tone: "danger" | "default" | "muted" | "success" | "warning";
   value: number;
@@ -33,13 +36,23 @@ const toneClassMap: Record<KpiCardProps["tone"], string> = {
 
 const numberFormatter = new Intl.NumberFormat("ko-KR");
 
-export function KpiCard({ description, label, tone, value }: KpiCardProps) {
+function KpiCardContent({ description, href, label, tone, value }: KpiCardProps) {
   return (
-    <Card className={cn("overflow-hidden", toneClassMap[tone])}>
+    <Card
+      className={cn(
+        "overflow-hidden transition",
+        toneClassMap[tone],
+        href
+          ? "cursor-pointer border-transparent hover:border-brand-300 hover:shadow-[0_28px_62px_rgba(6,18,38,0.14)]"
+          : undefined,
+      )}
+    >
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-3">
           <Badge tone={tone}>{label}</Badge>
-          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-500">Live</span>
+          <span className="text-[11px] font-semibold tracking-[0.2em] text-ink-500 uppercase">
+            {href ? "상세 이동" : "실시간"}
+          </span>
         </div>
 
         <div className="space-y-2">
@@ -54,5 +67,17 @@ export function KpiCard({ description, label, tone, value }: KpiCardProps) {
         </div>
       </div>
     </Card>
+  );
+}
+
+export function KpiCard(props: KpiCardProps) {
+  if (!props.href) {
+    return <KpiCardContent {...props} />;
+  }
+
+  return (
+    <Link href={props.href} className="block">
+      <KpiCardContent {...props} />
+    </Link>
   );
 }

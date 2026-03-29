@@ -13,16 +13,14 @@ export function LogCard({
   log: DirectiveLogItem;
 }) {
   return (
-    <Card className="space-y-4">
+    <Card id={`log-${log.id}`} className="log-anchor-target scroll-mt-32 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="muted">
               {directiveLogTypeLabels[log.logType as keyof typeof directiveLogTypeLabels] ?? log.logType}
             </Badge>
-            <span className="text-xs font-semibold text-ink-500">
-              {formatDateTimeLabel(log.happenedAt)}
-            </span>
+            <span className="text-xs font-semibold text-ink-500">{formatDateTimeLabel(log.happenedAt)}</span>
           </div>
           <h3 className="text-base font-semibold text-ink-950">{log.actionSummary}</h3>
         </div>
@@ -33,7 +31,7 @@ export function LogCard({
         {log.detail ? <p>{log.detail}</p> : null}
         {log.nextAction ? (
           <p>
-            <strong className="text-ink-950">다음 액션:</strong> {log.nextAction}
+            <strong className="text-ink-950">다음 조치:</strong> {log.nextAction}
           </p>
         ) : null}
         {log.riskNote ? (

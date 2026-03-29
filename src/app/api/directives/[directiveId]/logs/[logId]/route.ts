@@ -4,6 +4,7 @@ import {
   logPayloadSchema,
   softDeleteDirectiveLogAsSession,
   updateDirectiveLogAsSession,
+  validateDirectiveLogSubmission,
 } from "@/features/directives";
 import {
   createApiErrorResponse,
@@ -70,6 +71,9 @@ export async function PATCH(request: Request, context: DirectiveLogRouteContext)
 
     const { directiveId, logId } = await context.params;
     const formData = await request.formData();
+    const files = formData
+      .getAll("attachments")
+      .filter((value): value is File => value instanceof File && value.size > 0 && Boolean(value.name));
     const payload = {
       actionSummary: String(formData.get("actionSummary") ?? ""),
       departmentId: String(formData.get("departmentId") ?? "") || null,
@@ -79,6 +83,18 @@ export async function PATCH(request: Request, context: DirectiveLogRouteContext)
       nextAction: String(formData.get("nextAction") ?? "") || null,
       riskNote: String(formData.get("riskNote") ?? "") || null,
     };
+    const validationMessage = validateDirectiveLogSubmission({
+      ...payload,
+      attachmentCount: files.length,
+    });
+
+    if (validationMessage) {
+      return createApiErrorResponse(400, {
+        code: "DIRECTIVE_LOG_UPDATE_INVALID",
+        message: validationMessage,
+      });
+    }
+
     const parsed = logPayloadSchema.safeParse(payload);
 
     if (!parsed.success) {

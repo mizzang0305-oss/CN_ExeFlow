@@ -39,7 +39,7 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
     if (!parsed.success) {
       return createApiErrorResponse(400, {
         code: "DIRECTIVE_WORKFLOW_INVALID",
-        message: parsed.error.issues[0]?.message ?? "요청 사유가 올바르지 않습니다.",
+        message: parsed.error.issues[0]?.message ?? "완료 요청 입력값이 올바르지 않습니다.",
       });
     }
 

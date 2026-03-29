@@ -47,7 +47,7 @@ export function SectionCard({
 }: SectionCardProps) {
   return (
     <Card className={cn("relative overflow-hidden", accentClassMap[accent], className)} {...props}>
-      <div className={cn("absolute inset-x-6 top-0 h-px bg-gradient-to-r", railClassMap[accent])} />
+      <div className={cn("pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r", railClassMap[accent])} />
       <div className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">

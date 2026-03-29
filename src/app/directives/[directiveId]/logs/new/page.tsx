@@ -25,7 +25,7 @@ export default async function NewDirectiveLogPage({ params, searchParams }: NewD
     directive = await getDirectiveDetailForSession(session, directiveId);
 
     if (!directive.workflow.canManageLogs) {
-      throw new Error("이 지시사항에 행동 로그를 등록할 권한이 없습니다.");
+      throw new Error("이 지시에 행동 로그를 등록할 권한이 없습니다.");
     }
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "행동 로그 화면을 불러오지 못했습니다.";

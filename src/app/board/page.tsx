@@ -1,6 +1,15 @@
 import Link from "next/link";
 
-import { AppFrame, Badge, EmptyState, ErrorState, KpiCard, SectionCard, StatusPill } from "@/components";
+import {
+  AppFrame,
+  Badge,
+  EmptyState,
+  ErrorState,
+  KpiCard,
+  SectionCard,
+  StatusPill,
+  WorkflowActionPanel,
+} from "@/components";
 import { requireDepartmentSession } from "@/features/auth";
 import { directiveLogTypeLabels, getDepartmentBoardData, type DirectiveListItem } from "@/features/directives";
 import { formatDateLabel, formatDateTimeLabel, formatRelativeUpdate } from "@/lib";
@@ -107,11 +116,11 @@ export default async function DepartmentBoardPage() {
         currentPath="/board"
         session={session}
         title={`${session.departmentName ?? "부서"} 실행보드`}
-        description="우리 부서의 실행 품질과 담당자 행동 신호를 바로 파악할 수 있는 실무 관제 화면입니다."
+        description="부서 단위 실행 흐름, 완료 요청, 지연과 증빙 부족 신호를 한 화면에서 관리합니다."
       >
         <ErrorState
-          title="부서 실행보드를 열 수 없습니다"
-          description={errorMessage ?? "부서 실행 현황을 다시 불러와 주세요."}
+          title="부서 실행보드를 불러오지 못했습니다"
+          description={errorMessage ?? "잠시 후 다시 시도해주세요."}
         />
       </AppFrame>
     );
@@ -120,66 +129,71 @@ export default async function DepartmentBoardPage() {
   const assigneeSignals = summarizeAssignees(board.items);
   const lowActivitySignals = buildLowActivitySignals(assigneeSignals);
   const delayedItems = board.items.filter((item) => item.isDelayed).slice(0, 6);
+  const requestableItems = board.items
+    .filter((item) => item.currentDepartmentStatus === "IN_PROGRESS" || item.currentDepartmentStatus === "DELAYED")
+    .slice(0, 4);
+  const rejectedItems = board.items.filter((item) => item.currentDepartmentStatus === "REJECTED").slice(0, 4);
 
   return (
     <AppFrame
       currentPath="/board"
       session={session}
       title={`${session.departmentName ?? "부서"} 실행보드`}
-      description="우리 부서 KPI, 담당자 실행 현황, 증빙 누락, 승인 대기, 지연 신호를 실무 조치 중심으로 재정렬했습니다."
+      description="우리 부서 KPI, 담당자별 실행 현황, 완료 요청과 재진행 흐름을 한 번에 처리할 수 있게 정리했습니다."
     >
       <div className="space-y-6">
         <section className="panel-strong relative overflow-hidden p-6 sm:p-8">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(47,130,237,0.14),transparent_30%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(47,130,237,0.14),transparent_30%)]" />
           <div className="relative grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
             <div className="space-y-6">
               <div className="flex flex-wrap gap-2">
                 <StatusPill tone="default">{session.departmentName ?? "우리 부서"}</StatusPill>
-                <StatusPill tone="danger">{`증빙 누락 ${board.missingEvidenceItems.length}건`}</StatusPill>
+                <StatusPill tone="danger">{`증빙 보강 ${board.missingEvidenceItems.length}건`}</StatusPill>
                 <StatusPill tone="warning">{`지연 ${delayedItems.length}건`}</StatusPill>
               </div>
 
               <div className="space-y-3">
                 <h2 className="text-3xl font-semibold tracking-tight text-ink-950 sm:text-[2.1rem]">
-                  우리 부서의 실행 품질과 담당자 리스크를 바로 확인하는 운영 보드
+                  우리 부서의 실행 현황과 완료 요청 흐름을 바로 점검하는 실행 보드
                 </h2>
                 <p className="max-w-3xl text-sm leading-7 text-ink-700">
-                  누가 얼마나 배정받았는지, 누가 로그를 남기지 않았는지, 어떤 건이 증빙 없이 멈춰 있는지
-                  바로 보이도록 실무 조치 중심으로 정리했습니다.
+                  누가 무엇을 맡고 있는지, 어떤 항목이 증빙 없이 남아 있는지, 어느 지시를 지금 완료 요청할 수 있는지
+                  한눈에 볼 수 있게 구성했습니다.
                 </p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-[26px] border border-brand-100/80 bg-white/88 px-4 py-4 shadow-[0_18px_36px_rgba(3,19,38,0.08)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-700">Urgent</p>
-                  <p className="mt-2 text-3xl font-semibold text-ink-950">{board.urgentItems.length}</p>
-                  <p className="mt-1 text-sm text-ink-700">긴급 우선 건</p>
-                </div>
-                <div className="rounded-[26px] border border-ink-200/80 bg-white/88 px-4 py-4 shadow-[0_18px_36px_rgba(3,19,38,0.08)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-600">Approval</p>
-                  <p className="mt-2 text-3xl font-semibold text-ink-950">{board.waitingApprovalItems.length}</p>
-                  <p className="mt-1 text-sm text-ink-700">완료 요청 대기</p>
-                </div>
-                <div className="rounded-[26px] border border-ink-200/80 bg-white/88 px-4 py-4 shadow-[0_18px_36px_rgba(3,19,38,0.08)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-600">Due Soon</p>
-                  <p className="mt-2 text-3xl font-semibold text-ink-950">{board.dueSoonItems.length}</p>
-                  <p className="mt-1 text-sm text-ink-700">7일 내 마감</p>
-                </div>
-                <div className="rounded-[26px] border border-ink-200/80 bg-white/88 px-4 py-4 shadow-[0_18px_36px_rgba(3,19,38,0.08)]">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-600">Signals</p>
-                  <p className="mt-2 text-3xl font-semibold text-ink-950">{lowActivitySignals.length}</p>
-                  <p className="mt-1 text-sm text-ink-700">저활동 시그널</p>
-                </div>
+                {[
+                  { description: "긴급 우선 목록", href: "/directives?urgent=true", label: "긴급", value: board.urgentItems.length },
+                  {
+                    description: "승인 대기 항목",
+                    href: "/directives?status=COMPLETION_REQUESTED",
+                    label: "승인 대기",
+                    value: board.waitingApprovalItems.length,
+                  },
+                  { description: "7일 내 마감", href: "/directives", label: "마감 임박", value: board.dueSoonItems.length },
+                  { description: "저활동 신호", href: "/directives", label: "관리 신호", value: lowActivitySignals.length },
+                ].map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="rounded-[26px] border border-ink-200/80 bg-white/88 px-4 py-4 shadow-[0_18px_36px_rgba(3,19,38,0.08)] transition hover:border-brand-300 hover:bg-brand-50/70"
+                  >
+                    <p className="text-[11px] font-semibold tracking-[0.2em] text-ink-600 uppercase">{item.label}</p>
+                    <p className="mt-2 text-3xl font-semibold text-ink-950">{item.value}</p>
+                    <p className="mt-1 text-sm text-ink-700">{item.description}</p>
+                  </Link>
+                ))}
               </div>
             </div>
 
             <div className="rounded-[32px] border border-brand-100/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(238,244,255,0.84))] p-5 shadow-[0_26px_56px_rgba(3,19,38,0.09)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-700">Today&apos;s Priorities</p>
+              <p className="text-[11px] font-semibold tracking-[0.22em] text-brand-700 uppercase">오늘 우선순위</p>
               <div className="mt-4 space-y-3">
                 {[
-                  ["증빙 보강", `${board.missingEvidenceItems.length}건`, "로그는 있지만 증빙이 부족한 건부터 보강합니다."],
-                  ["완료 요청 확인", `${board.waitingApprovalItems.length}건`, "승인 대기 건을 빠르게 위로 올려 흐름을 막지 않습니다."],
-                  ["지연 조치", `${delayedItems.length}건`, "지연 신호가 난 건은 담당자와 마감일을 함께 확인합니다."],
+                  ["완료 요청 점검", `${requestableItems.length}건`, "로그, 증빙, 담당자 조건을 확인하고 완료 요청까지 이어갑니다."],
+                  ["재진행 필요", `${rejectedItems.length}건`, "반려된 항목은 보완 후 재진행으로 전환해 흐름을 다시 살립니다."],
+                  ["증빙 보강", `${board.missingEvidenceItems.length}건`, "증빙이 없는 로그는 승인 단계 전에 먼저 보강합니다."],
                 ].map(([title, value, description]) => (
                   <div key={title} className="rounded-[24px] border border-white/70 bg-white/88 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
@@ -196,20 +210,155 @@ export default async function DepartmentBoardPage() {
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {board.kpis.map((kpi) => (
-            <KpiCard key={kpi.label} {...kpi} />
+            <KpiCard
+              key={kpi.label}
+              {...kpi}
+              href={
+                kpi.label === "배정 건수"
+                  ? "/directives"
+                  : kpi.label === "진행 중"
+                    ? "/directives?status=IN_PROGRESS"
+                    : kpi.label === "승인 대기"
+                      ? "/directives?status=COMPLETION_REQUESTED"
+                      : kpi.label === "지연"
+                        ? "/directives?status=DELAYED"
+                        : "/directives"
+              }
+            />
           ))}
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
           <SectionCard
             accent="brand"
+            title="완료 요청 / 재진행"
+            description="부서장 전용 처리 구간입니다. 현재 상태에 따라 완료 요청 또는 재진행을 바로 실행할 수 있습니다."
+          >
+            {requestableItems.length === 0 && rejectedItems.length === 0 ? (
+              <EmptyState
+                title="처리할 상태 전환 항목이 없습니다"
+                description="진행 중, 지연, 반려 상태의 현재 부서 지시가 생기면 여기에서 바로 처리할 수 있습니다."
+              />
+            ) : (
+              <div className="space-y-4">
+                {requestableItems.map((item) => (
+                  <div key={`request-${item.id}`} className="rounded-[26px] border border-brand-100/80 bg-white px-5 py-5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={item.currentDepartmentStatus === "DELAYED" ? "warning" : "default"}>
+                            {item.currentDepartmentStatus === "DELAYED" ? "지연 상태" : "진행 중"}
+                          </Badge>
+                          <Badge tone="muted">{item.directiveNo}</Badge>
+                        </div>
+                        <p className="mt-3 text-base font-semibold text-ink-950">{item.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-ink-700">
+                          {item.ownerUserName ? `담당 ${item.ownerUserName}` : "담당자 미지정"} · 로그 {item.logCount}건 ·
+                          증빙 {item.attachmentCount}건
+                        </p>
+                      </div>
+                      <Link
+                        href={`/directives/${item.id}`}
+                        className="text-sm font-semibold text-brand-700"
+                      >
+                        상세 보기
+                      </Link>
+                    </div>
+
+                    <div className="mt-4">
+                      <WorkflowActionPanel
+                        canRequestCompletion
+                        departmentId={item.currentDepartmentId ?? session.departmentId!}
+                        departmentLabel={session.departmentName ?? "현재 부서"}
+                        directiveId={item.id}
+                        helperText="완료 요청 전 로그 1건 이상, 증빙 1건 이상, 담당자 지정, 결과 요약 입력이 모두 필요합니다."
+                      />
+                    </div>
+                  </div>
+                ))}
+
+                {rejectedItems.map((item) => (
+                  <div key={`resume-${item.id}`} className="rounded-[26px] border border-warning-200/80 bg-white px-5 py-5">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone="warning">반려</Badge>
+                          <Badge tone="muted">{item.directiveNo}</Badge>
+                        </div>
+                        <p className="mt-3 text-base font-semibold text-ink-950">{item.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-ink-700">
+                          보완 후 재진행으로 전환하면 다시 로그 등록과 완료 요청을 이어갈 수 있습니다.
+                        </p>
+                      </div>
+                      <Link href={`/directives/${item.id}`} className="text-sm font-semibold text-brand-700">
+                        상세 보기
+                      </Link>
+                    </div>
+
+                    <div className="mt-4">
+                      <WorkflowActionPanel
+                        canResumeProgress
+                        departmentId={item.currentDepartmentId ?? session.departmentId!}
+                        departmentLabel={session.departmentName ?? "현재 부서"}
+                        directiveId={item.id}
+                        helperText="반려 사유를 보완한 뒤 재진행으로 전환해 흐름을 다시 시작합니다."
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            accent="brand"
+            title="최근 활동 로그"
+            description="최근 실행 로그는 텍스트가 흔들리지 않도록 정리했고, 클릭 시 해당 로그 위치로 바로 이동합니다."
+            action={<Badge tone="default">{`${board.recentUpdates.length}건`}</Badge>}
+          >
+            {board.recentUpdates.length === 0 ? (
+              <EmptyState
+                title="최근 활동 로그가 없습니다"
+                description="로그가 등록되면 여기에서 최신 실행 흐름을 바로 확인할 수 있습니다."
+              />
+            ) : (
+              <div className="space-y-3">
+                {board.recentUpdates.map((update) => (
+                  <Link
+                    key={`${update.directiveId}-${update.logId}`}
+                    href={`/directives/${update.directiveId}#log-${update.logId}`}
+                    className="group relative rounded-[26px] border border-brand-100/80 bg-white px-5 py-5 transition hover:border-brand-300 hover:bg-brand-50/35"
+                  >
+                    <div className="pointer-events-none absolute inset-y-5 left-5 w-px bg-brand-100" />
+                    <div className="relative space-y-3 opacity-100">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone="default">{directiveLogTypeLabels[update.logType]}</Badge>
+                        <span className="text-xs font-medium text-ink-500 opacity-100">
+                          {formatDateTimeLabel(update.happenedAt)} · {formatRelativeUpdate(update.happenedAt)}
+                        </span>
+                      </div>
+                      <p className="pl-4 text-base font-semibold text-ink-950 opacity-100">{update.actionSummary}</p>
+                      <p className="pl-4 text-sm leading-6 text-ink-700 opacity-100">
+                        {update.directiveNo} · {update.userName ?? "작성자 미확인"}
+                      </p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+          <SectionCard
+            accent="brand"
             title="담당자 실행 현황"
-            description="담당자별 배정 건수와 지연, 증빙 누락, 무로그 신호를 함께 보여 누구에게 조치가 필요한지 바로 식별합니다."
+            description="담당자별 배정 건수와 지연, 증빙 부족, 무로그 신호를 함께 묶어 바로 코칭할 수 있게 만들었습니다."
           >
             {assigneeSignals.length === 0 ? (
               <EmptyState
-                title="담당자 실행 현황이 없습니다"
-                description="담당자와 연결된 지시사항이 생기면 이곳에 실행 품질 신호가 나타납니다."
+                title="담당자 현황이 없습니다"
+                description="담당자가 연결된 지시가 생기면 이 영역에 요약이 표시됩니다."
               />
             ) : (
               <div className="space-y-3">
@@ -219,8 +368,7 @@ export default async function DepartmentBoardPage() {
                       <div>
                         <p className="text-base font-semibold text-ink-950">{signal.assigneeName}</p>
                         <p className="mt-2 text-sm leading-6 text-ink-700">
-                          총 {signal.totalCount}건 · 진행 {signal.inProgressCount}건 · 승인 대기{" "}
-                          {signal.waitingApprovalCount}건
+                          총 {signal.totalCount}건 · 진행 {signal.inProgressCount}건 · 승인 대기 {signal.waitingApprovalCount}건
                         </p>
                       </div>
                       <StatusPill tone={signal.delayedCount > 0 || signal.noLogCount > 0 ? "warning" : "success"}>
@@ -230,7 +378,7 @@ export default async function DepartmentBoardPage() {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Badge tone="warning">{`지연 ${signal.delayedCount}`}</Badge>
-                      <Badge tone="danger">{`증빙 누락 ${signal.missingEvidenceCount}`}</Badge>
+                      <Badge tone="danger">{`증빙 부족 ${signal.missingEvidenceCount}`}</Badge>
                       <Badge tone="muted">{`무로그 ${signal.noLogCount}`}</Badge>
                       <Badge tone="success">{`완료 ${signal.completedCount}`}</Badge>
                     </div>
@@ -241,35 +389,31 @@ export default async function DepartmentBoardPage() {
           </SectionCard>
 
           <SectionCard
-            accent="brand"
-            title="최근 행동 로그"
-            description="우리 부서가 읽어야 할 최신 행동 흐름을 시간순으로 정리했습니다."
-            action={<Badge tone="default">{`${board.recentUpdates.length}건`}</Badge>}
+            accent="neutral"
+            title="무로그 / 저활동 신호"
+            description="로그가 없거나 최근 활동이 오래된 담당자를 먼저 보여줘 빠르게 코칭할 수 있게 했습니다."
           >
-            {board.recentUpdates.length === 0 ? (
+            {lowActivitySignals.length === 0 ? (
               <EmptyState
-                title="최근 행동 로그가 없습니다"
-                description="로그가 쌓이면 이곳에서 최신 실행 흐름을 확인할 수 있습니다."
+                title="저활동 신호가 없습니다"
+                description="모든 담당자가 최근 로그와 증빙 흐름을 유지하고 있습니다."
               />
             ) : (
               <div className="space-y-3">
-                {board.recentUpdates.map((update) => (
-                  <Link
-                    key={`${update.directiveId}-${update.happenedAt}`}
-                    href={`/directives/${update.directiveId}`}
-                    className="rounded-[26px] border border-brand-100/80 bg-white px-5 py-5 transition hover:-translate-y-0.5"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="default">{directiveLogTypeLabels[update.logType]}</Badge>
-                      <span className="text-xs font-medium text-ink-500">
-                        {formatDateTimeLabel(update.happenedAt)} · {formatRelativeUpdate(update.happenedAt)}
-                      </span>
+                {lowActivitySignals.map((signal) => (
+                  <div key={signal.assigneeName} className="rounded-[26px] border border-ink-200/90 bg-white px-5 py-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-ink-950">{signal.assigneeName}</p>
+                        <p className="mt-2 text-sm leading-6 text-ink-700">
+                          무로그 {signal.noLogCount}건 · 증빙 부족 {signal.missingEvidenceCount}건
+                        </p>
+                      </div>
+                      <StatusPill tone={signal.noLogCount > 0 ? "warning" : "default"}>
+                        {signal.lastActivityAt ? formatDateTimeLabel(signal.lastActivityAt) : "활동 기록 없음"}
+                      </StatusPill>
                     </div>
-                    <p className="mt-3 text-base font-semibold text-ink-950">{update.actionSummary}</p>
-                    <p className="mt-2 text-sm leading-6 text-ink-700">
-                      {update.directiveNo} · {update.userName ?? "작성자 미확인"}
-                    </p>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}
@@ -279,14 +423,14 @@ export default async function DepartmentBoardPage() {
         <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
           <SectionCard
             accent="danger"
-            title="증빙 누락 건"
-            description="행동은 시작됐지만 사진, 문서, 증빙이 부족한 항목을 먼저 끌어올렸습니다."
+            title="증빙 부족 항목"
+            description="로그는 남았지만 사진, 문서, 캡처 등 증빙이 부족한 지시를 먼저 모았습니다."
             action={<Badge tone="danger">{`${board.missingEvidenceItems.length}건`}</Badge>}
           >
             {board.missingEvidenceItems.length === 0 ? (
               <EmptyState
-                title="증빙 누락 건이 없습니다"
-                description="현재는 추가 증빙이 필요한 항목이 없습니다."
+                title="증빙 부족 항목이 없습니다"
+                description="현재 추가 증빙이 필요한 항목이 없습니다."
               />
             ) : (
               <div className="space-y-3">
@@ -294,7 +438,7 @@ export default async function DepartmentBoardPage() {
                   <Link
                     key={item.id}
                     href={`/directives/${item.id}`}
-                    className="rounded-[26px] border border-danger-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,241,241,0.9))] px-5 py-5 shadow-[0_18px_38px_rgba(220,38,38,0.08)] transition hover:-translate-y-0.5"
+                    className="rounded-[26px] border border-danger-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,241,241,0.9))] px-5 py-5 shadow-[0_18px_38px_rgba(220,38,38,0.08)] transition hover:border-danger-300 hover:bg-danger-50"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tone="danger">증빙 보강 필요</Badge>
@@ -312,49 +456,13 @@ export default async function DepartmentBoardPage() {
 
           <SectionCard
             accent="warning"
-            title="완료 요청 대기"
-            description="우리 부서가 이미 움직였고 현재 승인만 기다리는 항목을 분리했습니다."
-            action={<Badge tone="warning">{`${board.waitingApprovalItems.length}건`}</Badge>}
-          >
-            {board.waitingApprovalItems.length === 0 ? (
-              <EmptyState
-                title="완료 요청 대기 건이 없습니다"
-                description="현재는 상위 승인만 기다리는 항목이 없습니다."
-              />
-            ) : (
-              <div className="space-y-3">
-                {board.waitingApprovalItems.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={`/directives/${item.id}`}
-                    className="rounded-[26px] border border-warning-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,249,236,0.92))] px-5 py-5 transition hover:-translate-y-0.5"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="warning">승인 대기</Badge>
-                      <Badge tone="muted">{item.directiveNo}</Badge>
-                    </div>
-                    <p className="mt-3 text-base font-semibold text-ink-950">{item.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-ink-700">
-                      완료 요청 {item.departmentProgress.COMPLETION_REQUESTED}곳 · 최근 활동{" "}
-                      {formatRelativeUpdate(item.lastActivityAt)}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-        </section>
-
-        <section className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-          <SectionCard
-            accent="warning"
-            title="지연 건"
-            description="누가 막혀 있는지 바로 보도록 마감일과 주관 담당자를 같이 붙였습니다."
+            title="지연 항목"
+            description="마감이 지난 항목은 담당자와 최근 활동을 함께 보여줘 빠르게 후속 조치를 할 수 있게 했습니다."
             action={<Badge tone="warning">{`${delayedItems.length}건`}</Badge>}
           >
             {delayedItems.length === 0 ? (
               <EmptyState
-                title="지연 건이 없습니다"
+                title="지연 항목이 없습니다"
                 description="현재 마감이 지난 미완료 항목이 없습니다."
               />
             ) : (
@@ -363,7 +471,7 @@ export default async function DepartmentBoardPage() {
                   <Link
                     key={item.id}
                     href={`/directives/${item.id}`}
-                    className="rounded-[26px] border border-warning-200/80 bg-white px-5 py-5 transition hover:-translate-y-0.5"
+                    className="rounded-[26px] border border-warning-200/80 bg-white px-5 py-5 transition hover:border-warning-300 hover:bg-warning-50/40"
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div>
@@ -377,42 +485,11 @@ export default async function DepartmentBoardPage() {
                         </p>
                       </div>
                       <div className="rounded-[20px] bg-warning-50 px-4 py-3 text-right">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-warning-700">Due</p>
+                        <p className="text-xs font-semibold tracking-[0.18em] text-warning-700 uppercase">마감일</p>
                         <p className="mt-1 text-sm font-semibold text-ink-950">{formatDateLabel(item.dueDate)}</p>
                       </div>
                     </div>
                   </Link>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-
-          <SectionCard
-            accent="neutral"
-            title="무로그 / 저활동 시그널"
-            description="로그가 없거나 최근 활동이 오래된 담당자를 먼저 보여 빠른 코칭과 점검이 가능하게 했습니다."
-          >
-            {lowActivitySignals.length === 0 ? (
-              <EmptyState
-                title="저활동 시그널이 없습니다"
-                description="모든 담당자가 최근 로그와 증빙 흐름을 유지하고 있습니다."
-              />
-            ) : (
-              <div className="space-y-3">
-                {lowActivitySignals.map((signal) => (
-                  <div key={signal.assigneeName} className="rounded-[26px] border border-ink-200/90 bg-white px-5 py-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-base font-semibold text-ink-950">{signal.assigneeName}</p>
-                        <p className="mt-2 text-sm leading-6 text-ink-700">
-                          무로그 {signal.noLogCount}건 · 증빙 누락 {signal.missingEvidenceCount}건
-                        </p>
-                      </div>
-                      <StatusPill tone={signal.noLogCount > 0 ? "warning" : "default"}>
-                        {signal.lastActivityAt ? formatDateTimeLabel(signal.lastActivityAt) : "활동 기록 없음"}
-                      </StatusPill>
-                    </div>
-                  </div>
                 ))}
               </div>
             )}

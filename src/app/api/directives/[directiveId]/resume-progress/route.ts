@@ -1,6 +1,6 @@
 import { getCurrentSession } from "@/features/auth";
 import {
-  rejectDirectiveCompletionAsSession,
+  resumeDirectiveProgressAsSession,
   workflowReasonSchema,
 } from "@/features/directives";
 import {
@@ -39,11 +39,11 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
     if (!parsed.success) {
       return createApiErrorResponse(400, {
         code: "DIRECTIVE_WORKFLOW_INVALID",
-        message: parsed.error.issues[0]?.message ?? "반려 입력값이 올바르지 않습니다.",
+        message: parsed.error.issues[0]?.message ?? "재진행 입력값이 올바르지 않습니다.",
       });
     }
 
-    await rejectDirectiveCompletionAsSession(session, {
+    await resumeDirectiveProgressAsSession(session, {
       departmentId: parsed.data.departmentId,
       directiveId,
       reason: parsed.data.reason,
@@ -52,7 +52,7 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
     return createApiSuccessResponse({
       departmentId: parsed.data.departmentId,
       directiveId,
-      status: "REJECTED",
+      status: "IN_PROGRESS",
     });
   } catch (error) {
     return handleApiError(error);
