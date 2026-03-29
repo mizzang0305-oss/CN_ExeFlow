@@ -1,15 +1,55 @@
-import type { JsonObject, PlaceholderApiResponse } from "@/types";
+import type {
+  ApiFailureResponse,
+  ApiResponse,
+  ApiSuccessResponse,
+  JsonObject,
+  PlaceholderApiResponse,
+} from "@/types";
 
 import { ApiError } from "./errors";
 
-export function createPlaceholderResponse(
-  resource: string,
-): PlaceholderApiResponse {
+export function createPlaceholderResponse(resource: string): PlaceholderApiResponse {
   return {
     resource,
     status: "pending",
-    message: "Initial API route scaffold only. No business logic yet.",
+    message: "초기 API 스캐폴드 상태입니다. 아직 비즈니스 로직이 연결되지 않았습니다.",
   };
+}
+
+function stringifyDetail(detail: unknown) {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (detail == null) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
+}
+
+export function createApiSuccessResponse<T>(data: T, init?: ResponseInit) {
+  return Response.json(
+    {
+      ok: true,
+      data,
+    } satisfies ApiSuccessResponse<T>,
+    init,
+  );
+}
+
+export function createApiErrorResponse(status: number, error: ApiFailureResponse["error"]) {
+  return Response.json(
+    {
+      ok: false,
+      error,
+    } satisfies ApiFailureResponse,
+    { status },
+  );
 }
 
 export async function readJsonBody(
@@ -24,24 +64,25 @@ export async function readJsonBody(
       return {};
     }
 
-    throw new ApiError(400, "Request body is required.");
+    throw new ApiError(400, "요청 본문이 비어 있습니다.", null, "REQUEST_BODY_REQUIRED");
   }
 
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType && !contentType.includes("application/json")) {
-    throw new ApiError(415, "Content-Type must be application/json.");
+    throw new ApiError(
+      415,
+      "JSON 형식으로 요청해 주세요.",
+      { contentType },
+      "CONTENT_TYPE_INVALID",
+    );
   }
 
   try {
     const parsedBody = JSON.parse(rawBody) as unknown;
 
-    if (
-      parsedBody === null ||
-      typeof parsedBody !== "object" ||
-      Array.isArray(parsedBody)
-    ) {
-      throw new ApiError(400, "Request body must be a JSON object.");
+    if (parsedBody === null || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
+      throw new ApiError(400, "JSON 객체 형태로 요청해 주세요.", null, "REQUEST_BODY_INVALID");
     }
 
     return parsedBody as JsonObject;
@@ -50,27 +91,54 @@ export async function readJsonBody(
       throw error;
     }
 
-    throw new ApiError(400, "Invalid JSON body.");
+    throw new ApiError(400, "JSON 형식이 올바르지 않습니다.", null, "REQUEST_JSON_INVALID");
   }
 }
 
 export function handleApiError(error: unknown) {
+  const traceId = crypto.randomUUID();
+
   if (error instanceof ApiError) {
-    return Response.json(
-      {
-        error: error.message,
-        details: error.details ?? null,
-      },
-      { status: error.status },
-    );
+    console.error(`[${traceId}] API error`, {
+      code: error.code,
+      details: error.details ?? null,
+      message: error.message,
+      status: error.status,
+    });
+
+    return createApiErrorResponse(error.status, {
+      code: error.code,
+      detail: stringifyDetail(error.details),
+      message: error.message,
+      traceId,
+    });
   }
 
-  console.error("Unhandled API error", error);
+  console.error(`[${traceId}] Unhandled API error`, error);
 
-  return Response.json(
-    {
-      error: "Internal server error.",
-    },
-    { status: 500 },
-  );
+  return createApiErrorResponse(500, {
+    code: "INTERNAL_SERVER_ERROR",
+    detail: stringifyDetail(error),
+    message: "요청을 처리하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+    traceId,
+  });
+}
+
+export async function readApiResponse<T>(response: Response) {
+  const payload = (await response.json()) as ApiResponse<T>;
+
+  if (!response.ok || !payload.ok) {
+    if (!payload.ok) {
+      throw new ApiError(
+        response.status || 500,
+        payload.error.message,
+        payload.error.detail ?? null,
+        payload.error.code,
+      );
+    }
+
+    throw new ApiError(response.status || 500, "요청을 처리하지 못했습니다.", null, "API_RESPONSE_INVALID");
+  }
+
+  return payload.data;
 }

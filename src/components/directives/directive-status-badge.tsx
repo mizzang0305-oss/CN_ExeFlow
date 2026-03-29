@@ -7,11 +7,11 @@ const statusToneMap: Record<
   DirectiveStatus,
   "danger" | "default" | "muted" | "success" | "warning"
 > = {
+  NEW: "muted",
+  IN_PROGRESS: "default",
+  COMPLETION_REQUESTED: "warning",
+  DELAYED: "danger",
   COMPLETED: "success",
-  COMPLETION_REQUESTED: "default",
-  DELAYED: "warning",
-  IN_PROGRESS: "muted",
-  NEW: "default",
   REJECTED: "danger",
 };
 

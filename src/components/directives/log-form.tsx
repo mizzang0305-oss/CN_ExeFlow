@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { directiveLogTypeLabels } from "@/features/directives/constants";
 import type { DirectiveLogItem } from "@/features/directives/types";
-import type { AppSession } from "@/features/auth/types";
+import { directiveLogTypeLabels } from "@/features/directives/constants";
+import { readApiResponse } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,6 @@ type LogFormProps = {
   directiveId: string;
   initialLog?: DirectiveLogItem;
   mode: "create" | "edit";
-  session: AppSession;
 };
 
 function toDateTimeLocalValue(value: string | null | undefined) {
@@ -42,7 +41,7 @@ function toDateTimeLocalValue(value: string | null | undefined) {
   return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
 }
 
-export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps) {
+export function LogForm({ directiveId, initialLog, mode }: LogFormProps) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,17 +65,10 @@ export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps
         },
       );
 
-      const payload = (await response.json()) as { error?: string };
-
-      if (!response.ok) {
-        setError(payload.error ?? "행동 로그를 저장하지 못했습니다.");
-        return;
-      }
-
-      router.push(`/directives/${directiveId}`);
-      router.refresh();
-    } catch {
-      setError("행동 로그 요청을 처리하지 못했습니다.");
+      await readApiResponse(response);
+      router.replace(`/directives/${directiveId}`);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "행동 로그를 저장하지 못했습니다.");
     } finally {
       setIsPending(false);
     }
@@ -87,7 +79,7 @@ export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps
       <div className="space-y-2">
         <CardTitle>{isEdit ? "행동 로그 수정" : "행동 로그 등록"}</CardTitle>
         <CardDescription>
-          현장에서 바로 남길 수 있도록 필요한 항목만 남겼습니다. 증빙은 사진과 문서를 함께 올릴 수 있습니다.
+          현장에서 바로 남길 수 있도록 필요한 항목만 묶었습니다. 사진과 문서는 한 번에 여러 개 첨부할 수 있습니다.
         </CardDescription>
       </div>
 
@@ -115,7 +107,11 @@ export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps
         </div>
 
         <FieldGroup>
-          <FieldLabel label="행동 요약" required hint="10초 안에 남길 수 있는 짧은 요약이 가장 좋습니다." />
+          <FieldLabel
+            label="행동 요약"
+            required
+            hint="10초 안에 읽히는 짧은 문장으로 적어 주세요."
+          />
           <Input
             name="actionSummary"
             placeholder="예: 현장 점검 후 간판 교체 일정 확정"
@@ -127,7 +123,7 @@ export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps
           <FieldLabel label="상세 내용" hint="필요할 때만 조금 더 설명해 주세요." />
           <Textarea
             name="detail"
-            placeholder="진행한 내용과 결과를 간단히 남깁니다."
+            placeholder="진행 내용과 결과를 간단히 기록합니다."
             defaultValue={initialLog?.detail ?? ""}
           />
         </FieldGroup>
@@ -137,7 +133,7 @@ export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps
             <FieldLabel label="다음 액션" />
             <Input
               name="nextAction"
-              placeholder="예: 4월 2일 오전 교체 완료 예정"
+              placeholder="예: 4월 2일 자재 교체 완료 예정"
               defaultValue={initialLog?.nextAction ?? ""}
             />
           </FieldGroup>
@@ -153,28 +149,22 @@ export function LogForm({ directiveId, initialLog, mode, session }: LogFormProps
         </div>
 
         <FieldGroup>
-          <FieldLabel label="사진 / 문서 증빙" hint="여러 파일을 한 번에 올릴 수 있습니다." />
+          <FieldLabel label="사진 / 문서 증빙" hint="여러 파일을 한 번에 첨부할 수 있습니다." />
           <Input name="attachments" type="file" multiple className="h-auto py-3" />
         </FieldGroup>
 
-        <input name="departmentId" type="hidden" value={session.departmentId ?? ""} />
-
         {error ? (
-          <div className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700">
-            {error}
-          </div>
+          <div className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700">{error}</div>
         ) : null}
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Link href={`/directives/${directiveId}`} className="text-sm font-semibold text-ink-500">
-              상세로 돌아가기
-            </Link>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="submit" size="lg" disabled={isPending}>
-                {isPending ? "저장 중..." : isEdit ? "수정 저장" : "로그 저장"}
-              </Button>
-            </div>
-          </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link href={`/directives/${directiveId}`} className="text-sm font-semibold text-ink-500">
+            상세로 돌아가기
+          </Link>
+          <Button type="submit" size="lg" disabled={isPending}>
+            {isPending ? "저장 중..." : isEdit ? "수정 저장" : "로그 저장"}
+          </Button>
+        </div>
       </form>
     </Card>
   );

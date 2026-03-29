@@ -1,6 +1,6 @@
 import { getCurrentSession } from "@/features/auth";
 import { getDirectiveDetailForSession } from "@/features/directives";
-import { handleApiError } from "@/lib/api";
+import { createApiErrorResponse, createApiSuccessResponse, handleApiError } from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -10,20 +10,20 @@ type DirectiveRouteContext = {
   }>;
 };
 
-export async function GET(
-  _request: Request,
-  context: DirectiveRouteContext,
-) {
+export async function GET(_request: Request, context: DirectiveRouteContext) {
   try {
     const session = await getCurrentSession();
 
     if (!session) {
-      return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+      return createApiErrorResponse(401, {
+        code: "AUTH_REQUIRED",
+        message: "로그인이 필요합니다.",
+      });
     }
 
     const { directiveId } = await context.params;
     const data = await getDirectiveDetailForSession(session, directiveId);
-    return Response.json({ data });
+    return createApiSuccessResponse(data);
   } catch (error) {
     return handleApiError(error);
   }

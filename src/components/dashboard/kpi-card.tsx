@@ -1,4 +1,5 @@
-import { Badge, Card } from "@/components";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
 type KpiCardProps = {
   label: string;

@@ -1,11 +1,16 @@
+import { getCurrentSession } from "@/features/auth";
 import {
-  createDirective,
+  createDirectiveAsSession,
   createDirectiveSchema,
   directiveListQuerySchema,
   listDirectivesForSession,
 } from "@/features/directives";
-import { getCurrentSession } from "@/features/auth";
-import { handleApiError, readJsonBody } from "@/lib/api";
+import {
+  createApiErrorResponse,
+  createApiSuccessResponse,
+  handleApiError,
+  readJsonBody,
+} from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -14,7 +19,10 @@ export async function GET(request: Request) {
     const session = await getCurrentSession();
 
     if (!session) {
-      return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+      return createApiErrorResponse(401, {
+        code: "AUTH_REQUIRED",
+        message: "로그인이 필요합니다.",
+      });
     }
 
     const parsed = directiveListQuerySchema.safeParse(
@@ -22,15 +30,14 @@ export async function GET(request: Request) {
     );
 
     if (!parsed.success) {
-      return Response.json(
-        { error: parsed.error.issues[0]?.message ?? "조회 조건이 올바르지 않습니다." },
-        { status: 400 },
-      );
+      return createApiErrorResponse(400, {
+        code: "DIRECTIVE_QUERY_INVALID",
+        message: parsed.error.issues[0]?.message ?? "조회 조건이 올바르지 않습니다.",
+      });
     }
 
     const result = await listDirectivesForSession(session, parsed.data);
-
-    return Response.json(result);
+    return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);
   }
@@ -38,19 +45,27 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const session = await getCurrentSession();
+
+    if (!session) {
+      return createApiErrorResponse(401, {
+        code: "AUTH_REQUIRED",
+        message: "로그인이 필요합니다.",
+      });
+    }
+
     const body = await readJsonBody(request);
     const parsed = createDirectiveSchema.safeParse(body);
 
     if (!parsed.success) {
-      return Response.json(
-        { error: parsed.error.issues[0]?.message ?? "지시사항 입력값이 올바르지 않습니다." },
-        { status: 400 },
-      );
+      return createApiErrorResponse(400, {
+        code: "DIRECTIVE_CREATE_INVALID",
+        message: parsed.error.issues[0]?.message ?? "지시사항 입력값이 올바르지 않습니다.",
+      });
     }
 
-    const result = await createDirective(parsed.data);
-
-    return Response.json(result, { status: 201 });
+    const result = await createDirectiveAsSession(session, parsed.data);
+    return createApiSuccessResponse(result, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

@@ -5,40 +5,44 @@ import {
   softDeleteDirectiveLogAsSession,
   updateDirectiveLogAsSession,
 } from "@/features/directives";
-import { handleApiError, readJsonBody } from "@/lib/api";
+import {
+  createApiErrorResponse,
+  createApiSuccessResponse,
+  handleApiError,
+  readJsonBody,
+} from "@/lib/api";
 
 export const runtime = "nodejs";
 
-type DirectiveLogDeleteRouteContext = {
+type DirectiveLogRouteContext = {
   params: Promise<{
     directiveId: string;
     logId: string;
   }>;
 };
 
-export async function DELETE(
-  request: Request,
-  context: DirectiveLogDeleteRouteContext,
-) {
+export async function DELETE(request: Request, context: DirectiveLogRouteContext) {
   try {
     const session = await getCurrentSession();
 
     if (!session) {
-      return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+      return createApiErrorResponse(401, {
+        code: "AUTH_REQUIRED",
+        message: "로그인이 필요합니다.",
+      });
     }
 
     const { directiveId, logId } = await context.params;
     const body = await readJsonBody(request, { required: false });
     const parsed = deleteLogSchema.safeParse({
-      deletedBy: session.userId,
       reason: typeof body.reason === "string" ? body.reason : null,
     });
 
     if (!parsed.success) {
-      return Response.json(
-        { error: parsed.error.issues[0]?.message ?? "삭제 요청이 올바르지 않습니다." },
-        { status: 400 },
-      );
+      return createApiErrorResponse(400, {
+        code: "DIRECTIVE_LOG_DELETE_INVALID",
+        message: parsed.error.issues[0]?.message ?? "삭제 요청이 올바르지 않습니다.",
+      });
     }
 
     const result = await softDeleteDirectiveLogAsSession(session, {
@@ -47,43 +51,40 @@ export async function DELETE(
       logId,
     });
 
-    return Response.json({ data: result });
+    return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);
   }
 }
 
-export async function PATCH(
-  request: Request,
-  context: DirectiveLogDeleteRouteContext,
-) {
+export async function PATCH(request: Request, context: DirectiveLogRouteContext) {
   try {
     const session = await getCurrentSession();
 
     if (!session) {
-      return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+      return createApiErrorResponse(401, {
+        code: "AUTH_REQUIRED",
+        message: "로그인이 필요합니다.",
+      });
     }
 
     const { directiveId, logId } = await context.params;
     const formData = await request.formData();
     const payload = {
       actionSummary: String(formData.get("actionSummary") ?? ""),
-      departmentId: String(formData.get("departmentId") ?? session.departmentId ?? ""),
       detail: String(formData.get("detail") ?? "") || null,
       happenedAt: String(formData.get("happenedAt") ?? ""),
       logType: String(formData.get("logType") ?? ""),
       nextAction: String(formData.get("nextAction") ?? "") || null,
       riskNote: String(formData.get("riskNote") ?? "") || null,
-      taskId: String(formData.get("taskId") ?? "") || null,
-      userId: session.userId,
     };
     const parsed = logPayloadSchema.safeParse(payload);
 
     if (!parsed.success) {
-      return Response.json(
-        { error: parsed.error.issues[0]?.message ?? "수정 입력값이 올바르지 않습니다." },
-        { status: 400 },
-      );
+      return createApiErrorResponse(400, {
+        code: "DIRECTIVE_LOG_UPDATE_INVALID",
+        message: parsed.error.issues[0]?.message ?? "수정 입력값이 올바르지 않습니다.",
+      });
     }
 
     const result = await updateDirectiveLogAsSession(
@@ -96,7 +97,7 @@ export async function PATCH(
       formData.getAll("attachments"),
     );
 
-    return Response.json({ data: result });
+    return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);
   }

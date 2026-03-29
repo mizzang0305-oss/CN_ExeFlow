@@ -1,4 +1,4 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { JsonObject } from "@/types";
 
@@ -14,20 +14,23 @@ type HistoryRecordInput = {
   metadata?: JsonObject;
 };
 
-function canFallbackToAuditLogs(error: PostgrestError) {
-  return error.code === "42P01" || error.code === "42703";
+function buildAuditPayload(input: HistoryRecordInput) {
+  return {
+    action: input.action,
+    acted_at: new Date().toISOString(),
+    acted_by: input.actorId,
+    after_data: {
+      current: input.afterData ?? null,
+      metadata: input.metadata ?? {},
+    },
+    before_data: input.beforeData ?? null,
+    entity_id: input.entityId,
+    entity_type: input.entityType,
+    id: crypto.randomUUID(),
+  };
 }
 
-export async function recordHistory(
-  client: SupabaseClient,
-  input: HistoryRecordInput,
-) {
-  const payload = {
-    afterData: input.afterData ?? null,
-    beforeData: input.beforeData ?? null,
-    metadata: input.metadata ?? {},
-  };
-
+async function tryInsertHistoryTable(client: SupabaseClient, input: HistoryRecordInput) {
   const historyInsert = await client.from("history").insert({
     action: input.action,
     actor_id: input.actorId,
@@ -35,32 +38,24 @@ export async function recordHistory(
     entity_id: input.entityId,
     entity_type: input.entityType,
     id: crypto.randomUUID(),
-    payload,
+    payload: {
+      afterData: input.afterData ?? null,
+      beforeData: input.beforeData ?? null,
+      metadata: input.metadata ?? {},
+    },
   });
 
-  if (!historyInsert.error) {
-    return;
+  if (historyInsert.error) {
+    console.warn("History table write skipped", historyInsert.error);
   }
+}
 
-  if (!canFallbackToAuditLogs(historyInsert.error)) {
-    throw new ApiError(500, "Failed to record history.", historyInsert.error);
-  }
-
-  const auditInsert = await client.from("audit_logs").insert({
-    acted_at: new Date().toISOString(),
-    acted_by: input.actorId,
-    action: input.action,
-    after_data: payload,
-    before_data: input.beforeData ?? null,
-    entity_id: input.entityId,
-    entity_type: input.entityType,
-    id: crypto.randomUUID(),
-  });
+export async function recordHistory(client: SupabaseClient, input: HistoryRecordInput) {
+  const auditInsert = await client.from("audit_logs").insert(buildAuditPayload(input));
 
   if (auditInsert.error) {
-    throw new ApiError(500, "Failed to record history.", {
-      auditError: auditInsert.error,
-      historyError: historyInsert.error,
-    });
+    throw new ApiError(500, "변경 이력을 기록하지 못했습니다.", auditInsert.error, "AUDIT_LOG_WRITE_FAILED");
   }
+
+  await tryInsertHistoryTable(client, input);
 }
