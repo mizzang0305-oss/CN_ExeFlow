@@ -163,8 +163,13 @@ export function UserEditor({
         </div>
 
         <div className="md:col-span-2 flex flex-wrap gap-2">
-          <Button type="submit" size="md" disabled={pending}>
-            {pending ? "저장 중..." : initialUser ? "사용자 저장" : "사용자 생성"}
+          <Button
+            type="submit"
+            size="md"
+            isLoading={pending}
+            loadingLabel={initialUser ? "사용자 저장 중" : "사용자 생성 중"}
+          >
+            {initialUser ? "사용자 저장" : "사용자 생성"}
           </Button>
           <Button type="button" size="md" variant="ghost" onClick={onCancel} disabled={pending}>
             취소

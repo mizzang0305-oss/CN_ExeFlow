@@ -83,8 +83,10 @@ export function WorkflowActionPanel({
             size="md"
             onClick={() => void runAction(`/api/directives/${directiveId}/request-completion`)}
             disabled={Boolean(isPending)}
+            isLoading={isPending === `/api/directives/${directiveId}/request-completion`}
+            loadingLabel="요청 중"
           >
-            {isPending === `/api/directives/${directiveId}/request-completion` ? "요청 중..." : "완료 요청"}
+            완료 요청
           </Button>
         ) : null}
 
@@ -93,8 +95,10 @@ export function WorkflowActionPanel({
             size="md"
             onClick={() => void runAction(`/api/directives/${directiveId}/approve-completion`)}
             disabled={Boolean(isPending)}
+            isLoading={isPending === `/api/directives/${directiveId}/approve-completion`}
+            loadingLabel="승인 중"
           >
-            {isPending === `/api/directives/${directiveId}/approve-completion` ? "승인 중..." : "승인"}
+            승인
           </Button>
         ) : null}
 
@@ -104,8 +108,10 @@ export function WorkflowActionPanel({
             size="md"
             onClick={() => void runAction(`/api/directives/${directiveId}/reject-completion`)}
             disabled={Boolean(isPending)}
+            isLoading={isPending === `/api/directives/${directiveId}/reject-completion`}
+            loadingLabel="반려 중"
           >
-            {isPending === `/api/directives/${directiveId}/reject-completion` ? "반려 중..." : "반려"}
+            반려
           </Button>
         ) : null}
       </div>

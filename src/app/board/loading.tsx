@@ -1,22 +1,21 @@
 import { LoadingCard, SkeletonBlock } from "@/components";
 
-export default function DashboardLoading() {
+export default function BoardLoading() {
   return (
     <main className="app-container space-y-4 py-8">
       <div className="panel-strong p-6 sm:p-8">
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
           <div className="space-y-4">
-            <SkeletonBlock className="h-6 w-32 rounded-full" />
+            <SkeletonBlock className="h-6 w-36 rounded-full" />
             <SkeletonBlock className="h-12 w-3/4 rounded-[20px]" />
             <SkeletonBlock className="h-4 w-full rounded-full" />
-            <SkeletonBlock className="h-4 w-5/6 rounded-full" />
             <div className="grid gap-3 sm:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
                 <SkeletonBlock key={index} className="h-28 rounded-[26px]" />
               ))}
             </div>
           </div>
-          <SkeletonBlock className="min-h-[280px] rounded-[30px]" />
+          <SkeletonBlock className="min-h-[240px] rounded-[30px]" />
         </div>
       </div>
 

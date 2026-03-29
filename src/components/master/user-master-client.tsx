@@ -190,8 +190,13 @@ export function UserMasterClient({
           ) : null}
 
           <div className="md:col-span-2 flex flex-wrap gap-2">
-            <Button type="submit" size="md" disabled={isPending}>
-              {isPending ? "저장 중..." : editingId ? "사용자 수정" : "사용자 추가"}
+            <Button
+              type="submit"
+              size="md"
+              isLoading={isPending}
+              loadingLabel={editingId ? "사용자 저장 중" : "사용자 추가 중"}
+            >
+              {editingId ? "사용자 수정" : "사용자 추가"}
             </Button>
             {editingId ? (
               <Button type="button" variant="ghost" size="md" onClick={resetForm} disabled={isPending}>

@@ -161,8 +161,13 @@ export function DepartmentMasterClient({
           ) : null}
 
           <div className="md:col-span-2 flex flex-wrap gap-2">
-            <Button type="submit" size="md" disabled={isPending}>
-              {isPending ? "저장 중..." : editingId ? "부서 수정" : "부서 추가"}
+            <Button
+              type="submit"
+              size="md"
+              isLoading={isPending}
+              loadingLabel={editingId ? "부서 저장 중" : "부서 추가 중"}
+            >
+              {editingId ? "부서 수정" : "부서 추가"}
             </Button>
             {editingId ? (
               <Button type="button" variant="ghost" size="md" onClick={resetForm} disabled={isPending}>

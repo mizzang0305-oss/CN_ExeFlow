@@ -8,16 +8,16 @@ export function Card({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("panel p-5 sm:p-6", className)} {...props}>
+    <div className={cn("panel relative overflow-hidden p-5 sm:p-6", className)} {...props}>
       {children}
     </div>
   );
 }
 
 export function CardTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-lg font-semibold tracking-tight text-ink-950">{children}</h2>;
+  return <h2 className="text-xl font-semibold tracking-tight text-ink-950">{children}</h2>;
 }
 
 export function CardDescription({ children }: { children: ReactNode }) {
-  return <p className="text-sm leading-6 text-ink-700">{children}</p>;
+  return <p className="text-sm leading-6 text-ink-600">{children}</p>;
 }

@@ -1930,12 +1930,33 @@ export async function getDashboardData(session: AppSession): Promise<DashboardDa
 
   return {
     delayedItems: items.filter((item) => item.isDelayed).slice(0, 6),
+    items,
     kpis: [
-      { label: "전체 건수", tone: "default", value: items.length },
-      { label: "진행 중", tone: "muted", value: items.filter((item) => item.status === "IN_PROGRESS").length },
-      { label: "지연", tone: "warning", value: items.filter((item) => item.isDelayed).length },
-      { label: "완료", tone: "success", value: items.filter((item) => item.status === "COMPLETED").length },
-      { label: "긴급", tone: "danger", value: items.filter((item) => item.isUrgent).length },
+      { label: "전체 건수", tone: "default", value: items.length, description: "현재 집행 범위 전체" },
+      {
+        label: "진행 중",
+        tone: "muted",
+        value: items.filter((item) => item.status === "IN_PROGRESS").length,
+        description: "현장 실행이 이어지는 건",
+      },
+      {
+        label: "지연",
+        tone: "warning",
+        value: items.filter((item) => item.isDelayed).length,
+        description: "조치가 밀리기 시작한 건",
+      },
+      {
+        label: "완료",
+        tone: "success",
+        value: items.filter((item) => item.status === "COMPLETED").length,
+        description: "승인 완료된 건",
+      },
+      {
+        label: "긴급",
+        tone: "danger",
+        value: items.filter((item) => item.isUrgent).length,
+        description: "즉시 판단이 필요한 건",
+      },
     ],
     recentUpdates,
     urgentItems: items.filter((item) => item.isUrgent && item.status !== "COMPLETED").slice(0, 6),
@@ -1965,12 +1986,33 @@ export async function getDepartmentBoardData(session: AppSession): Promise<Depar
         return target >= now && target <= sevenDaysLater && item.status !== "COMPLETED";
       })
       .slice(0, 6),
+    items,
     kpis: [
-      { label: "배정 건수", tone: "default", value: items.length },
-      { label: "진행 중", tone: "muted", value: items.filter((item) => item.status === "IN_PROGRESS").length },
-      { label: "승인 대기", tone: "default", value: items.filter((item) => item.status === "COMPLETION_REQUESTED").length },
-      { label: "지연", tone: "warning", value: items.filter((item) => item.isDelayed).length },
-      { label: "증빙 필요", tone: "danger", value: missingEvidenceItems.length },
+      { label: "배정 건수", tone: "default", value: items.length, description: "우리 부서가 읽을 전체 건" },
+      {
+        label: "진행 중",
+        tone: "muted",
+        value: items.filter((item) => item.status === "IN_PROGRESS").length,
+        description: "담당자 실행이 진행되는 건",
+      },
+      {
+        label: "승인 대기",
+        tone: "default",
+        value: items.filter((item) => item.status === "COMPLETION_REQUESTED").length,
+        description: "완료 요청 후 승인 대기 건",
+      },
+      {
+        label: "지연",
+        tone: "warning",
+        value: items.filter((item) => item.isDelayed).length,
+        description: "마감 리스크가 드러난 건",
+      },
+      {
+        label: "증빙 필요",
+        tone: "danger",
+        value: missingEvidenceItems.length,
+        description: "로그나 증빙이 비어 있는 건",
+      },
     ],
     missingEvidenceItems,
     recentUpdates,
