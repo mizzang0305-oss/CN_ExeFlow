@@ -346,6 +346,16 @@ export async function requireAdminSession() {
   return session;
 }
 
+export async function requireAdminApiSession() {
+  const session = await getCurrentSession();
+
+  if (!session || !isAdminRole(session.role)) {
+    throw new ApiError(403, "관리자 권한이 필요합니다.", null, "ADMIN_ACCESS_DENIED");
+  }
+
+  return session;
+}
+
 export async function requireExecutiveSession() {
   const session = await requireCurrentSession();
 

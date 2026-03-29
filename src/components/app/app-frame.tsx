@@ -19,8 +19,7 @@ function getNavigationItems(session: AppSession) {
       { href: "/dashboard", label: "대표 대시보드" },
       { href: "/directives", label: "지시사항" },
       { href: "/reports", label: "주간 결산" },
-      { href: "/admin/master/departments", label: "부서 기준정보" },
-      { href: "/admin/master/users", label: "사용자 기준정보" },
+      { href: "/admin/master/departments", label: "조직 운영도구" },
     ];
   }
 
