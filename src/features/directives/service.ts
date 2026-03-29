@@ -10,6 +10,7 @@ import {
   isExecutiveRole,
   isReadOnlyRole,
 } from "@/features/auth/utils";
+import { queueNotificationLogsAsync } from "@/features/activity";
 import { ApiError } from "@/lib/errors";
 import { recordHistory } from "@/lib/history";
 import { createSupabaseServerClient } from "@/lib/supabase";
@@ -53,6 +54,7 @@ const DIRECTIVE_EVIDENCE_BUCKET = "directive-evidence";
 const LOG_META_PREFIX = "__CNEXEFLOW_META__:";
 const MAX_DIRECTIVE_NUMBER_RETRIES = 5;
 const MAX_ATTACHMENT_SIZE_BYTES = 15 * 1024 * 1024;
+const DELAY_NOTIFICATION_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 type ActivityMaps = {
   attachmentCountByDirectiveId: Map<string, number>;
@@ -369,6 +371,71 @@ async function loadUsersMap(client: SupabaseClient, userIds: Array<string | null
   }
 
   return new Map(((data ?? []) as UserRecord[]).map((user) => [user.id, user]));
+}
+
+async function loadApproverUserIds(client: SupabaseClient) {
+  const { data, error } = await client
+    .from("users")
+    .select("id")
+    .eq("is_active", true)
+    .in("role", ["CEO", "SUPER_ADMIN"]);
+
+  if (error) {
+    throw mapSupabaseError(error, "승인 권한 사용자 정보를 불러오지 못했습니다.", "DIRECTIVE_APPROVER_LOAD_FAILED");
+  }
+
+  return (data ?? []).map((row) => row.id as string);
+}
+
+function buildUniqueUserIds(userIds: Array<string | null | undefined>) {
+  return Array.from(new Set(userIds.filter(Boolean) as string[]));
+}
+
+async function queueDelayNotificationIfNeeded(
+  client: SupabaseClient,
+  directive: DirectiveRow,
+  directiveDepartments: DirectiveDepartmentRow[],
+  nextStatus: DirectiveStatus,
+) {
+  if (!directive.due_date || nextStatus === "COMPLETED") {
+    return;
+  }
+
+  if (new Date(directive.due_date).getTime() >= Date.now()) {
+    return;
+  }
+
+  const windowStart = new Date(Date.now() - DELAY_NOTIFICATION_WINDOW_MS).toISOString();
+  const { data, error } = await client
+    .from("notification_logs")
+    .select("id")
+    .eq("directive_id", directive.id)
+    .eq("notification_type", "DIRECTIVE_DELAYED")
+    .gte("sent_at", windowStart)
+    .limit(1);
+
+  if (error) {
+    throw mapSupabaseError(error, "지연 알림 상태를 확인하지 못했습니다.", "DIRECTIVE_DELAY_NOTIFICATION_LOOKUP_FAILED");
+  }
+
+  if ((data ?? []).length > 0) {
+    return;
+  }
+
+  queueNotificationLogsAsync({
+    body: `${directive.title} 지시가 마감일을 지나 지연 상태로 관리되고 있습니다.`,
+    directiveId: directive.id,
+    metadata: {
+      directiveNo: directive.directive_no,
+      dueDate: directive.due_date,
+    },
+    notificationType: "DIRECTIVE_DELAYED",
+    title: `지연 발생 · ${directive.directive_no}`,
+    userIds: buildUniqueUserIds([
+      directive.owner_user_id,
+      ...directiveDepartments.map((assignment) => assignment.department_head_id),
+    ]),
+  });
 }
 
 async function loadDirectiveDepartmentsMap(client: SupabaseClient, directiveIds: string[]) {
@@ -1371,6 +1438,21 @@ export async function createDirectiveAsSession(session: AppSession, input: Creat
       },
     });
 
+    queueNotificationLogsAsync({
+      body: `${insertResult.data.title} 지시가 배정되었습니다. 실행 보드에서 세부 내용을 확인해주세요.`,
+      directiveId: insertResult.data.id,
+      metadata: {
+        directiveNo: insertResult.data.directive_no,
+        targetDepartmentCount: targetDepartmentIds.length,
+      },
+      notificationType: "DIRECTIVE_ASSIGNED",
+      title: `지시 배정 · ${insertResult.data.directive_no}`,
+      userIds: buildUniqueUserIds([
+        input.ownerUserId,
+        ...targetDepartmentIds.map((departmentId) => activeDepartmentsMap.get(departmentId)?.head_user_id ?? null),
+      ]),
+    });
+
     return insertResult.data;
   }
 
@@ -1691,7 +1773,7 @@ export async function createDirectiveLogAsSession(
   });
 
   await promoteDirectiveToInProgressIfNeeded(client, directive, directiveDepartments, departmentId);
-  await syncDirectiveAggregateStatus(client, directive.id);
+  const directiveStatus = await syncDirectiveAggregateStatus(client, directive.id);
   await recordHistory(client, {
     action: "DIRECTIVE_LOG_CREATED",
     actorId: session.userId,
@@ -1704,6 +1786,8 @@ export async function createDirectiveLogAsSession(
       directiveNo: directive.directive_no,
     },
   });
+
+  await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
 
   return insertResult.data;
 }
@@ -1810,7 +1894,7 @@ export async function updateDirectiveLogAsSession(
   });
 
   await promoteDirectiveToInProgressIfNeeded(client, directive, directiveDepartments, departmentId);
-  await syncDirectiveAggregateStatus(client, directive.id);
+  const directiveStatus = await syncDirectiveAggregateStatus(client, directive.id);
   await recordHistory(client, {
     action: "DIRECTIVE_LOG_UPDATED",
     actorId: session.userId,
@@ -1824,6 +1908,8 @@ export async function updateDirectiveLogAsSession(
       directiveNo: directive.directive_no,
     },
   });
+
+  await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
 
   return updateResult.data;
 }
@@ -1891,6 +1977,7 @@ export async function softDeleteDirectiveLogAsSession(session: AppSession, input
 
 export async function requestDirectiveCompletionAsSession(session: AppSession, input: WorkflowDecisionInput) {
   const client = createSupabaseServerClient();
+  const { directive, directiveDepartments } = await readDirectiveContext(client, input.directiveId);
   const detail = await getDirectiveDetailForSession(session, input.directiveId);
   const targetDepartment =
     detail.departments.find((department) => department.departmentId === input.departmentId) ??
@@ -1937,6 +2024,33 @@ export async function requestDirectiveCompletionAsSession(session: AppSession, i
       reason: input.reason,
     },
   });
+
+  queueNotificationLogsAsync({
+    body: `${directive.title} 지시에 대해 ${targetDepartment.departmentName ?? "해당 부서"}가 완료 요청을 등록했습니다.`,
+    directiveId: directive.id,
+    metadata: {
+      departmentId: targetDepartment.departmentId,
+      directiveNo: directive.directive_no,
+      requestReason: input.reason ?? null,
+    },
+    notificationType: "COMPLETION_REQUESTED",
+    title: `완료 요청 · ${directive.directive_no}`,
+    userIds: buildUniqueUserIds([session.userId]),
+  });
+
+  queueNotificationLogsAsync({
+    body: `${targetDepartment.departmentName ?? "부서"}에서 완료 승인을 요청했습니다. 승인 대기 큐를 확인해주세요.`,
+    directiveId: directive.id,
+    metadata: {
+      departmentId: targetDepartment.departmentId,
+      directiveNo: directive.directive_no,
+    },
+    notificationType: "APPROVAL_REQUESTED",
+    title: `승인 요청 · ${directive.directive_no}`,
+    userIds: await loadApproverUserIds(client),
+  });
+
+  await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
 }
 
 export async function approveDirectiveCompletionAsSession(session: AppSession, input: WorkflowDecisionInput) {
@@ -1981,6 +2095,18 @@ export async function approveDirectiveCompletionAsSession(session: AppSession, i
       reason: input.reason,
     },
   });
+
+  queueNotificationLogsAsync({
+    body: `${directive.title} 지시의 완료 요청이 승인되었습니다.`,
+    directiveId: directive.id,
+    metadata: {
+      departmentId: targetDepartment.department_id,
+      directiveNo: directive.directive_no,
+    },
+    notificationType: "APPROVAL_COMPLETED",
+    title: `승인 완료 · ${directive.directive_no}`,
+    userIds: buildUniqueUserIds([directive.owner_user_id, targetDepartment.department_head_id]),
+  });
 }
 
 export async function rejectDirectiveCompletionAsSession(session: AppSession, input: WorkflowDecisionInput) {
@@ -2022,6 +2148,54 @@ export async function rejectDirectiveCompletionAsSession(session: AppSession, in
       reason: input.reason,
     },
   });
+
+  queueNotificationLogsAsync({
+    body: `${directive.title} 지시의 완료 요청이 반려되었습니다. 실행 내용을 보완한 뒤 다시 요청해주세요.`,
+    directiveId: directive.id,
+    metadata: {
+      departmentId: targetDepartment.department_id,
+      directiveNo: directive.directive_no,
+      reason: input.reason ?? null,
+    },
+    notificationType: "DIRECTIVE_REJECTED",
+    title: `반려 · ${directive.directive_no}`,
+    userIds: buildUniqueUserIds([directive.owner_user_id, targetDepartment.department_head_id]),
+  });
+
+  await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
+}
+
+export async function resumeDirectiveProgressAsSession(session: AppSession, input: WorkflowDecisionInput) {
+  const client = createSupabaseServerClient();
+  const { directive, directiveDepartments } = await readDirectiveContext(client, input.directiveId);
+  const detail = await getDirectiveDetailForSession(session, input.directiveId);
+  const targetDepartment =
+    detail.departments.find((department) => department.departmentId === input.departmentId) ??
+    detail.departments.find((department) => department.departmentId === detail.workflow.currentDepartmentId) ??
+    null;
+
+  if (!targetDepartment || !targetDepartment.canResumeProgress || !canResumeDirectiveProgress(session, targetDepartment)) {
+    throw new ApiError(400, "반려된 부서만 재진행으로 전환할 수 있습니다.", null, "DIRECTIVE_RESUME_DENIED");
+  }
+
+  await updateDirectiveDepartmentStatus(client, input.directiveId, "IN_PROGRESS", {
+    departmentId: targetDepartment.departmentId,
+  });
+  const directiveStatus = await syncDirectiveAggregateStatus(client, input.directiveId);
+  await recordHistory(client, {
+    action: "DIRECTIVE_RESUMED",
+    actorId: session.userId,
+    entityId: input.directiveId,
+    entityType: "directive",
+    metadata: {
+      departmentId: targetDepartment.departmentId,
+      departmentName: targetDepartment.departmentName,
+      directiveStatus,
+      reason: input.reason,
+    },
+  });
+
+  await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
 }
 
 export async function resumeDirectiveProgressAsSession(session: AppSession, input: WorkflowDecisionInput) {

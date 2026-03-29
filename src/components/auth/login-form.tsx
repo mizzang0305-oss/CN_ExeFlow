@@ -3,20 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { ApiResponse } from "@/types";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
-  LoginBootstrapData,
-  LoginDepartmentOption,
-  LoginUserOption,
-  LoginUsersData,
-  SessionCreateResult,
+  ActivationLookupData,
+  AuthLoginResult,
+  AuthenticatedUserProfile,
 } from "@/features/auth/types";
+import { roleLabelMap } from "@/features/auth/utils";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
-import { FieldGroup, FieldLabel, Select } from "@/components/ui/field";
-import { SkeletonBlock } from "@/components/ui/skeleton-block";
+import { FieldGroup, FieldLabel, Input } from "@/components/ui/field";
 import { StatusPill } from "@/components/ui/status-pill";
+
+type LoginMode = "activate" | "login" | "recovery" | "reset";
 
 async function fetchApi<T>(input: RequestInfo, init?: RequestInit) {
   const response = await fetch(input, {
@@ -32,82 +32,81 @@ async function fetchApi<T>(input: RequestInfo, init?: RequestInit) {
   return payload.data;
 }
 
-export function LoginForm() {
-  const [departments, setDepartments] = useState<LoginDepartmentOption[]>([]);
-  const [users, setUsers] = useState<LoginUserOption[]>([]);
-  const [departmentId, setDepartmentId] = useState("");
-  const [userId, setUserId] = useState("");
-  const [bootstrapStatus, setBootstrapStatus] = useState<"error" | "loading" | "ready">("loading");
-  const [usersStatus, setUsersStatus] = useState<"error" | "idle" | "loading" | "ready">("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const selectedDepartment = useMemo(
-    () => departments.find((department) => department.id === departmentId) ?? null,
-    [departmentId, departments],
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[22px] border border-brand-100/80 bg-white/92 px-4 py-4">
+      <p className="text-[11px] font-semibold tracking-[0.18em] text-ink-500 uppercase">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-ink-950">{value}</p>
+    </div>
   );
+}
 
-  async function loadBootstrap() {
-    setBootstrapStatus("loading");
-    setErrorMessage(null);
+function LookupProfile({ user }: { user: AuthenticatedUserProfile }) {
+  return (
+    <div className="rounded-[28px] border border-brand-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(238,244,255,0.86))] p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill tone="default">조직 기준 정보</StatusPill>
+        <StatusPill tone={user.isActivated ? "warning" : "success"}>
+          {user.isActivated ? "최초 설정 완료" : "최초 설정 가능"}
+        </StatusPill>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <SummaryItem label="이름" value={user.displayName} />
+        <SummaryItem label="부서" value={user.departmentName ?? "미배정"} />
+        <SummaryItem label="직책" value={user.title ?? "미등록"} />
+        <SummaryItem label="역할" value={roleLabelMap[user.role]} />
+      </div>
+    </div>
+  );
+}
 
-    try {
-      const data = await fetchApi<LoginBootstrapData>("/api/login/bootstrap");
-      setDepartments(data.departments);
-      const initialDepartmentId = data.departments[0]?.id ?? "";
-      setDepartmentId(initialDepartmentId);
-      setUserId("");
-      setBootstrapStatus("ready");
-    } catch (error) {
-      setBootstrapStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "부서 목록을 불러오지 못했습니다.");
-    }
-  }
+export function LoginForm() {
+  const [mode, setMode] = useState<LoginMode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [lookupEmail, setLookupEmail] = useState("");
+  const [lookupResult, setLookupResult] = useState<ActivationLookupData | null>(null);
+  const [activationPassword, setActivationPassword] = useState("");
+  const [activationPasswordConfirm, setActivationPasswordConfirm] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryPasswordConfirm, setRecoveryPasswordConfirm] = useState("");
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
 
-  async function loadUsers(nextDepartmentId: string) {
-    if (!nextDepartmentId) {
-      setUsers([]);
-      setUsersStatus("idle");
-      return;
-    }
-
-    setUsersStatus("loading");
-    setSubmitError(null);
-
-    try {
-      const data = await fetchApi<LoginUsersData>(
-        `/api/login/users?departmentId=${encodeURIComponent(nextDepartmentId)}`,
-      );
-      setUsers(data.users);
-      setUsersStatus("ready");
-    } catch (error) {
-      setUsers([]);
-      setUsersStatus("error");
-      setSubmitError(error instanceof Error ? error.message : "부서 사용자 목록을 불러오지 못했습니다.");
-    }
-  }
+  const activationUser = useMemo(() => lookupResult?.profile ?? null, [lookupResult]);
 
   useEffect(() => {
-    void loadBootstrap();
+    const url = new URL(window.location.href);
+    const isRecoveryMode =
+      url.searchParams.get("mode") === "recovery" || window.location.hash.includes("access_token");
+
+    if (isRecoveryMode) {
+      setMode("recovery");
+      setInfoMessage("재설정 링크가 확인되었습니다. 새 비밀번호를 입력해주세요.");
+    }
   }, []);
 
-  useEffect(() => {
-    if (bootstrapStatus === "ready") {
-      void loadUsers(departmentId);
-    }
-  }, [bootstrapStatus, departmentId]);
+  function switchMode(nextMode: LoginMode) {
+    setMode(nextMode);
+    setInfoMessage(null);
+    setErrorMessage(null);
+  }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleLoginSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitError(null);
-    setIsSubmitting(true);
+    setIsPending(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
 
     try {
-      const data = await fetchApi<SessionCreateResult>("/api/login/session", {
+      const result = await fetchApi<AuthLoginResult>("/api/auth/login", {
         body: JSON.stringify({
-          departmentId,
-          userId,
+          email,
+          password,
+          rememberMe,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -115,48 +114,141 @@ export function LoginForm() {
         method: "POST",
       });
 
-      window.location.assign(data.redirectTo);
+      window.location.assign(result.redirectTo);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "로그인 요청을 완료하지 못했습니다.");
+      setErrorMessage(error instanceof Error ? error.message : "로그인을 완료하지 못했습니다.");
     } finally {
-      setIsSubmitting(false);
+      setIsPending(false);
     }
   }
 
-  if (bootstrapStatus === "loading") {
-    return (
-      <Card className="mx-auto w-full max-w-xl border-white/90 bg-white/94 p-6 sm:p-8">
-        <div className="space-y-6">
-          <div className="space-y-3">
-            <StatusPill tone="default">Access Sync</StatusPill>
-            <div className="space-y-2">
-              <CardTitle>접속 준비 중</CardTitle>
-              <CardDescription>부서와 사용자 목록을 불러오며 진입 환경을 정렬하고 있습니다.</CardDescription>
-            </div>
-          </div>
+  async function handleLookupSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsPending(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
 
-          <div className="space-y-4">
-            <SkeletonBlock className="h-24 rounded-[28px]" />
-            <SkeletonBlock className="h-24 rounded-[28px]" />
-            <SkeletonBlock className="h-16 rounded-[24px]" />
-          </div>
-        </div>
-      </Card>
-    );
+    try {
+      const result = await fetchApi<ActivationLookupData>(
+        `/api/auth/lookup-user?email=${encodeURIComponent(lookupEmail)}`,
+      );
+
+      setLookupResult(result);
+
+      if (!result.profile) {
+        setInfoMessage("해당 이메일로 등록된 활성 조직 사용자를 찾지 못했습니다.");
+      } else if (!result.canActivate) {
+        setInfoMessage("이미 최초 설정이 완료된 사용자입니다. 로그인 또는 비밀번호 재설정을 이용해주세요.");
+      } else {
+        setInfoMessage("조직 기준 정보를 확인했습니다. 비밀번호를 설정하고 시작해주세요.");
+      }
+    } catch (error) {
+      setLookupResult(null);
+      setErrorMessage(error instanceof Error ? error.message : "사용자 정보를 확인하지 못했습니다.");
+    } finally {
+      setIsPending(false);
+    }
   }
 
-  if (bootstrapStatus === "error") {
-    return (
-      <EmptyState
-        title="로그인 준비 정보를 불러오지 못했습니다"
-        description={errorMessage ?? "부서와 사용자 기본 정보를 다시 불러와 주세요."}
-        action={
-          <Button size="md" variant="secondary" onClick={() => void loadBootstrap()}>
-            다시 시도
-          </Button>
-        }
-      />
-    );
+  async function handleActivationSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsPending(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      if (!activationUser) {
+        throw new Error("먼저 이메일로 사용자 정보를 확인해주세요.");
+      }
+
+      if (activationPassword !== activationPasswordConfirm) {
+        throw new Error("비밀번호 확인이 일치하지 않습니다.");
+      }
+
+      const result = await fetchApi<AuthLoginResult>("/api/auth/activate", {
+        body: JSON.stringify({
+          email: lookupEmail,
+          password: activationPassword,
+          rememberMe: true,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      window.location.assign(result.redirectTo);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "최초 사용자 설정을 완료하지 못했습니다.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleResetSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsPending(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      await fetchApi<{ requested: true }>("/api/auth/reset-password", {
+        body: JSON.stringify({
+          email: resetEmail,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      setInfoMessage("입력한 이메일로 비밀번호 재설정 안내를 보냈습니다.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "재설정 요청을 보내지 못했습니다.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function handleRecoverySubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsPending(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    try {
+      if (recoveryPassword !== recoveryPasswordConfirm) {
+        throw new Error("비밀번호 확인이 일치하지 않습니다.");
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("재설정 세션이 만료되었습니다. 비밀번호 재설정을 다시 요청해주세요.");
+      }
+
+      const updateResult = await supabase.auth.updateUser({
+        password: recoveryPassword,
+      });
+
+      if (updateResult.error) {
+        throw new Error(updateResult.error.message);
+      }
+
+      await supabase.auth.signOut();
+      setMode("login");
+      setRecoveryPassword("");
+      setRecoveryPasswordConfirm("");
+      window.history.replaceState({}, document.title, "/login");
+      setInfoMessage("비밀번호를 변경했습니다. 새 비밀번호로 다시 로그인해주세요.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "비밀번호를 변경하지 못했습니다.");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -164,119 +256,221 @@ export function LoginForm() {
       <div className="space-y-8">
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <StatusPill tone="default">2단계 빠른 진입</StatusPill>
-            <StatusPill tone={usersStatus === "loading" ? "warning" : "success"}>
-              {usersStatus === "loading" ? "사용자 동기화 중" : "역할별 즉시 진입"}
-            </StatusPill>
+            <StatusPill tone="default">이메일 로그인</StatusPill>
+            <StatusPill tone="muted">최초 활성화 · 접속 감사 로그 연동</StatusPill>
           </div>
+
           <div className="space-y-2">
-            <CardTitle>운영 통제 플랫폼 진입</CardTitle>
+            <CardTitle>운영 통제 시스템 접속</CardTitle>
             <CardDescription>
-              부서와 사용자를 선택하면 역할에 맞는 실행 화면으로 즉시 이동합니다.
+              인증은 이메일과 비밀번호로 처리하고, 이름·부서·역할은 조직 기준 정보와 자동으로 연결합니다.
             </CardDescription>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[24px] border border-brand-100 bg-brand-50/75 px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-700">Department</p>
-              <p className="mt-2 text-sm font-semibold text-ink-950">부서 기준 진입</p>
-            </div>
-            <div className="rounded-[24px] border border-ink-200/80 bg-ink-100/70 px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-600">Role</p>
-              <p className="mt-2 text-sm font-semibold text-ink-950">권한별 홈 자동 연결</p>
-            </div>
-            <div className="rounded-[24px] border border-ink-200/80 bg-ink-100/70 px-4 py-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-600">Evidence</p>
-              <p className="mt-2 text-sm font-semibold text-ink-950">로그와 증빙 흐름 이어짐</p>
-            </div>
+
+          <div className="grid gap-3 sm:grid-cols-4">
+            {[
+              ["로그인", "이메일과 비밀번호로 바로 접속합니다."],
+              ["최초 설정", "사전 등록된 사용자만 활성화할 수 있습니다."],
+              ["비밀번호 재설정", "재설정 메일을 요청할 수 있습니다."],
+              ["자동 로그인", "로그인 상태 유지를 선택하면 세션을 이어갑니다."],
+            ].map(([title, description]) => (
+              <div key={title} className="rounded-[22px] border border-ink-200/80 bg-ink-100/70 px-4 py-4">
+                <p className="text-sm font-semibold text-ink-950">{title}</p>
+                <p className="mt-2 text-xs leading-5 text-ink-600">{description}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["login", "로그인"],
+              ["activate", "최초 사용자 설정"],
+              ["reset", "비밀번호 재설정"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => switchMode(value as LoginMode)}
+                className={
+                  mode === value
+                    ? "rounded-full bg-ink-950 px-4 py-2 text-sm font-semibold text-white"
+                    : "rounded-full bg-ink-100 px-4 py-2 text-sm font-semibold text-ink-700"
+                }
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          <div className="grid gap-4">
-            <div className="rounded-[28px] border border-brand-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(238,244,255,0.86))] p-4">
-              <FieldGroup className="space-y-3">
-                <FieldLabel label="1. 부서 선택" required hint="로그인 가능한 부서를 먼저 선택합니다." />
-                <Select
-                  name="departmentId"
-                  value={departmentId}
-                  onChange={(event) => {
-                    setDepartmentId(event.target.value);
-                    setUserId("");
-                  }}
-                >
-                  <option value="">부서를 선택해 주세요</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </Select>
-              </FieldGroup>
-            </div>
+        {mode === "login" ? (
+          <form className="space-y-4" onSubmit={handleLoginSubmit}>
+            <FieldGroup>
+              <FieldLabel label="이메일" required />
+              <Input
+                type="email"
+                name="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@cnfood.co.kr"
+              />
+            </FieldGroup>
 
-            <div className="rounded-[28px] border border-ink-200/80 bg-white/92 p-4">
-              <FieldGroup className="space-y-3">
-                <FieldLabel label="2. 사용자 선택" required hint="선택한 부서의 활성 사용자만 표시합니다." />
-                <Select
-                  name="userId"
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
-                  disabled={!departmentId || usersStatus === "loading"}
-                >
-                  <option value="">
-                    {usersStatus === "loading" ? "사용자 불러오는 중" : "사용자를 선택해 주세요"}
-                  </option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.displayName} · {user.role}
-                    </option>
-                  ))}
-                </Select>
-              </FieldGroup>
+            <FieldGroup>
+              <FieldLabel label="비밀번호" required />
+              <Input
+                type="password"
+                name="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="비밀번호를 입력해주세요"
+              />
+            </FieldGroup>
+
+            <label className="inline-flex items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+                className="h-4 w-4 rounded border border-ink-300 text-brand-700"
+              />
+              로그인 상태 유지
+            </label>
+
+            <Button type="submit" block size="lg" isLoading={isPending} loadingLabel="로그인 중">
+              로그인
+            </Button>
+
+            <div className="flex flex-wrap gap-3 text-sm font-semibold text-ink-600">
+              <button type="button" onClick={() => switchMode("activate")}>
+                최초 사용자 설정
+              </button>
+              <button type="button" onClick={() => switchMode("reset")}>
+                비밀번호 재설정
+              </button>
             </div>
+          </form>
+        ) : null}
+
+        {mode === "activate" ? (
+          <div className="space-y-5">
+            <form className="space-y-4" onSubmit={handleLookupSubmit}>
+              <FieldGroup>
+                <FieldLabel
+                  label="이메일"
+                  required
+                  hint="사전에 조직 사용자로 등록된 이메일만 최초 설정할 수 있습니다."
+                />
+                <Input
+                  type="email"
+                  value={lookupEmail}
+                  onChange={(event) => setLookupEmail(event.target.value)}
+                  placeholder="name@cnfood.co.kr"
+                />
+              </FieldGroup>
+
+              <Button type="submit" size="md" isLoading={isPending} loadingLabel="확인 중">
+                사용자 정보 확인
+              </Button>
+            </form>
+
+            {activationUser ? <LookupProfile user={activationUser} /> : null}
+
+            {activationUser && lookupResult?.canActivate ? (
+              <form className="space-y-4" onSubmit={handleActivationSubmit}>
+                <FieldGroup>
+                  <FieldLabel
+                    label="비밀번호 설정"
+                    required
+                    hint="이름, 부서, 직책, 역할은 조직 기준 정보로 고정됩니다."
+                  />
+                  <Input
+                    type="password"
+                    value={activationPassword}
+                    onChange={(event) => setActivationPassword(event.target.value)}
+                    placeholder="영문과 숫자를 포함한 8자 이상"
+                  />
+                </FieldGroup>
+
+                <FieldGroup>
+                  <FieldLabel label="비밀번호 확인" required />
+                  <Input
+                    type="password"
+                    value={activationPasswordConfirm}
+                    onChange={(event) => setActivationPasswordConfirm(event.target.value)}
+                    placeholder="비밀번호를 다시 입력해주세요"
+                  />
+                </FieldGroup>
+
+                <Button type="submit" size="lg" isLoading={isPending} loadingLabel="설정 중">
+                  시작하기
+                </Button>
+              </form>
+            ) : null}
           </div>
+        ) : null}
 
-          {selectedDepartment ? (
-            <div className="rounded-[28px] border border-brand-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(238,244,255,0.82))] px-5 py-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-ink-950">{selectedDepartment.name}</p>
-                  <p className="mt-1 text-sm text-ink-700">
-                    활성 사용자 {users.length}명
-                    {selectedDepartment.headUserName ? ` · 부서장 ${selectedDepartment.headUserName}` : ""}
-                  </p>
-                </div>
-                <StatusPill tone={usersStatus === "loading" ? "warning" : "default"}>
-                  {usersStatus === "loading" ? "사용자 목록 갱신 중" : `${selectedDepartment.userCount}명 등록`}
-                </StatusPill>
-              </div>
-            </div>
-          ) : null}
+        {mode === "reset" ? (
+          <form className="space-y-4" onSubmit={handleResetSubmit}>
+            <FieldGroup>
+              <FieldLabel
+                label="이메일"
+                required
+                hint="최초 설정이 완료된 사용자에게만 재설정 메일이 발송됩니다."
+              />
+              <Input
+                type="email"
+                value={resetEmail}
+                onChange={(event) => setResetEmail(event.target.value)}
+                placeholder="name@cnfood.co.kr"
+              />
+            </FieldGroup>
 
-          {usersStatus === "ready" && departmentId && users.length === 0 ? (
-            <EmptyState
-              title="활성 사용자가 없습니다"
-              description="선택한 부서에 로그인 가능한 사용자가 아직 배정되지 않았습니다."
-            />
-          ) : null}
+            <Button type="submit" size="lg" isLoading={isPending} loadingLabel="전송 중">
+              비밀번호 재설정 메일 보내기
+            </Button>
+          </form>
+        ) : null}
 
-          {submitError ? (
-            <div className="rounded-[24px] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
-              {submitError}
-            </div>
-          ) : null}
+        {mode === "recovery" ? (
+          <form className="space-y-4" onSubmit={handleRecoverySubmit}>
+            <FieldGroup>
+              <FieldLabel label="새 비밀번호" required />
+              <Input
+                type="password"
+                value={recoveryPassword}
+                onChange={(event) => setRecoveryPassword(event.target.value)}
+                placeholder="새 비밀번호를 입력해주세요"
+              />
+            </FieldGroup>
 
-          <Button
-            type="submit"
-            block
-            size="lg"
-            disabled={!departmentId || !userId || usersStatus === "loading"}
-            isLoading={isSubmitting}
-            loadingLabel="CN EXEFLOW 입장 중"
-          >
-            CN EXEFLOW 시작
-          </Button>
-        </form>
+            <FieldGroup>
+              <FieldLabel label="새 비밀번호 확인" required />
+              <Input
+                type="password"
+                value={recoveryPasswordConfirm}
+                onChange={(event) => setRecoveryPasswordConfirm(event.target.value)}
+                placeholder="새 비밀번호를 다시 입력해주세요"
+              />
+            </FieldGroup>
+
+            <Button type="submit" size="lg" isLoading={isPending} loadingLabel="변경 중">
+              비밀번호 변경 완료
+            </Button>
+          </form>
+        ) : null}
+
+        {infoMessage ? (
+          <div className="rounded-[24px] border border-brand-200 bg-brand-50/80 px-4 py-3 text-sm text-brand-800">
+            {infoMessage}
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="rounded-[24px] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+            {errorMessage}
+          </div>
+        ) : null}
       </div>
     </Card>
   );

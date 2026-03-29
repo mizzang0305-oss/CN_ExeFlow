@@ -47,6 +47,10 @@ function buildDisplayName(user: Pick<UserRow, "name" | "profile_name">) {
   return profileName && profileName.length > 0 ? profileName : user.name;
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 function compareDepartments(left: DepartmentRow, right: DepartmentRow) {
   const leftSort = left.sort_order ?? 0;
   const rightSort = right.sort_order ?? 0;
@@ -358,6 +362,28 @@ async function ensureDepartmentReference(
   await ensureDepartmentExists(client, departmentId);
 }
 
+async function ensureUserEmailUnique(
+  client: ReturnType<typeof createSupabaseServerClient>,
+  email: string,
+  excludeUserId?: string,
+) {
+  let query = client.from("users").select("id").ilike("email", normalizeEmail(email));
+
+  if (excludeUserId) {
+    query = query.neq("id", excludeUserId);
+  }
+
+  const { data, error } = await query.limit(1);
+
+  if (error) {
+    throw new ApiError(500, "이메일 중복 여부를 확인하지 못했습니다.", error, "MASTER_USER_EMAIL_CHECK_FAILED");
+  }
+
+  if ((data ?? []).length > 0) {
+    throw new ApiError(409, "이미 사용 중인 이메일입니다.", null, "MASTER_USER_EMAIL_DUPLICATED");
+  }
+}
+
 async function getNextSortOrder(
   client: ReturnType<typeof createSupabaseServerClient>,
   parentId: string | null,
@@ -588,6 +614,7 @@ export async function createUser(input: UserUpsertInput, actorId: string) {
   const userId = crypto.randomUUID();
 
   await ensureDepartmentReference(client, input.departmentId);
+  await ensureUserEmailUnique(client, input.email);
 
   const insertQuery = await client
     .from("users")
@@ -632,6 +659,7 @@ export async function updateUser(userId: string, input: UserUpsertInput, actorId
   const client = createSupabaseServerClient();
 
   await ensureDepartmentReference(client, input.departmentId);
+  await ensureUserEmailUnique(client, input.email, userId);
 
   const existingUser = await client
     .from("users")

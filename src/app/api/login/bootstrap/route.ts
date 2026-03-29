@@ -1,13 +1,10 @@
-import { listLoginBootstrapData } from "@/features/auth";
-import { createApiSuccessResponse, handleApiError } from "@/lib/api";
+import { createApiSuccessResponse } from "@/lib/api";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  try {
-    const data = await listLoginBootstrapData();
-    return createApiSuccessResponse(data);
-  } catch (error) {
-    return handleApiError(error);
-  }
+  return createApiSuccessResponse({
+    message: "이전 사용자 선택 로그인은 종료되었습니다. 이메일 로그인 또는 최초 사용자 설정을 이용해주세요.",
+    supported: false,
+  });
 }

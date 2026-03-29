@@ -4,16 +4,26 @@ import { createClient } from "@supabase/supabase-js";
 
 import { getSupabaseServerConfig as readSupabaseServerConfig } from "./config";
 
-export function createSupabaseServerClient() {
-  const { serviceRoleKey, url } = readSupabaseServerConfig();
-
-  return createClient(url, serviceRoleKey, {
+function createSupabaseClient(url: string, key: string) {
+  return createClient(url, key, {
     auth: {
       autoRefreshToken: false,
       detectSessionInUrl: false,
       persistSession: false,
     },
   });
+}
+
+export function createSupabaseServerClient() {
+  const { serviceRoleKey, url } = readSupabaseServerConfig();
+
+  return createSupabaseClient(url, serviceRoleKey);
+}
+
+export function createSupabaseAuthServerClient() {
+  const { anonKey, url } = readSupabaseServerConfig();
+
+  return createSupabaseClient(url, anonKey);
 }
 
 export function getSupabaseServerRuntimeConfig() {

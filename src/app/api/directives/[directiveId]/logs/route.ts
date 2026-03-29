@@ -1,4 +1,5 @@
 import { getCurrentSession } from "@/features/auth";
+import { trackUserActivityAsync } from "@/features/activity";
 import {
   createDirectiveLogAsSession,
   logPayloadSchema,
@@ -68,6 +69,34 @@ export async function POST(request: Request, context: DirectiveLogsRouteContext)
       },
       formData.getAll("attachments"),
     );
+
+    trackUserActivityAsync({
+      activityType: "DIRECTIVE_LOG_CREATE",
+      metadata: {
+        directiveId,
+        logId: result.id,
+        logType: parsed.data.logType,
+      },
+      pagePath: `/directives/${directiveId}`,
+      session,
+      targetId: directiveId,
+      targetType: "directive",
+    });
+
+    if (files.length > 0) {
+      trackUserActivityAsync({
+        activityType: "ATTACHMENT_UPLOAD",
+        metadata: {
+          attachmentCount: files.length,
+          directiveId,
+          logId: result.id,
+        },
+        pagePath: `/directives/${directiveId}`,
+        session,
+        targetId: directiveId,
+        targetType: "directive",
+      });
+    }
 
     return createApiSuccessResponse(result, { status: 201 });
   } catch (error) {

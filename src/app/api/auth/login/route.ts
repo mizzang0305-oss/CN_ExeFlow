@@ -1,8 +1,8 @@
 import {
-  createSessionFromUserSelection,
+  authLoginSchema,
   getCurrentSession,
   getDefaultAppRoute,
-  loginSessionSchema,
+  loginWithEmail,
 } from "@/features/auth";
 import { createApiSuccessResponse, handleApiError, readJsonBody } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
@@ -25,18 +25,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await readJsonBody(request);
-    const parsed = loginSessionSchema.safeParse(body);
+    const parsed = authLoginSchema.safeParse(body);
 
     if (!parsed.success) {
       throw new ApiError(
         400,
-        parsed.error.issues[0]?.message ?? "로그인 정보를 다시 확인해 주세요.",
+        parsed.error.issues[0]?.message ?? "로그인 정보를 다시 확인해주세요.",
         parsed.error.flatten(),
-        "LOGIN_SESSION_INVALID",
+        "AUTH_LOGIN_INVALID",
       );
     }
 
-    const result = await createSessionFromUserSelection(parsed.data);
+    const result = await loginWithEmail(parsed.data);
     return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);

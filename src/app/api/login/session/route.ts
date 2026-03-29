@@ -1,26 +1,10 @@
-import { createSessionFromUserSelection, loginSessionSchema } from "@/features/auth";
-import { createApiSuccessResponse, handleApiError, readJsonBody } from "@/lib/api";
-import { ApiError } from "@/lib/errors";
+import { createApiErrorResponse } from "@/lib/api";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
-  try {
-    const body = await readJsonBody(request);
-    const parsed = loginSessionSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ApiError(
-        400,
-        parsed.error.issues[0]?.message ?? "사용자와 부서를 다시 선택해 주세요.",
-        parsed.error.flatten(),
-        "LOGIN_SESSION_INVALID",
-      );
-    }
-
-    const result = await createSessionFromUserSelection(parsed.data);
-    return createApiSuccessResponse(result);
-  } catch (error) {
-    return handleApiError(error);
-  }
+export async function POST() {
+  return createApiErrorResponse(410, {
+    code: "LEGACY_LOGIN_DISABLED",
+    message: "이전 사용자 선택 로그인은 종료되었습니다. 이메일 로그인 또는 최초 사용자 설정을 이용해주세요.",
+  });
 }
