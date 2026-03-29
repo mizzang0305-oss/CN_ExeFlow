@@ -2,7 +2,12 @@ import Link from "next/link";
 
 import { AppFrame, Badge, EmptyState, ErrorState, KpiCard, SectionCard, StatusPill } from "@/components";
 import { requireDashboardSession } from "@/features/auth";
-import { directiveLogTypeLabels, getDashboardData, type DirectiveListItem } from "@/features/directives";
+import {
+  directiveLogTypeLabels,
+  directiveUrgentLevelLabels,
+  getDashboardData,
+  type DirectiveListItem,
+} from "@/features/directives";
 import { formatDateLabel, formatDateTimeLabel, formatRelativeUpdate } from "@/lib";
 
 export const dynamic = "force-dynamic";
@@ -44,19 +49,28 @@ function summarizeDepartments(items: DirectiveListItem[]): DepartmentExecutionSu
 
   return Array.from(summaryMap.values())
     .sort((left, right) => {
-      const riskDelta =
-        right.urgentCount +
-        right.delayedCount +
-        right.waitingApprovalCount -
-        (left.urgentCount + left.delayedCount + left.waitingApprovalCount);
+      const leftRisk = left.urgentCount + left.delayedCount + left.waitingApprovalCount;
+      const rightRisk = right.urgentCount + right.delayedCount + right.waitingApprovalCount;
 
-      if (riskDelta !== 0) {
-        return riskDelta;
+      if (leftRisk !== rightRisk) {
+        return rightRisk - leftRisk;
       }
 
       return right.totalCount - left.totalCount;
     })
     .slice(0, 6);
+}
+
+function describeTarget(item: DirectiveListItem) {
+  if (item.targetScope === "ALL") {
+    return `전사 대상 · 주관 ${item.ownerDepartmentName ?? "미지정"}`;
+  }
+
+  return `대상 ${item.targetDepartmentCount}개 부서 · 주관 ${item.ownerDepartmentName ?? "미지정"}`;
+}
+
+function formatUrgentLevel(urgentLevel: DirectiveListItem["urgentLevel"]) {
+  return urgentLevel ? directiveUrgentLevelLabels[urgentLevel] : "긴급";
 }
 
 export default async function DashboardPage() {
@@ -77,7 +91,7 @@ export default async function DashboardPage() {
         currentPath="/dashboard"
         session={session}
         title="대표 대시보드"
-        description="숫자와 리스크를 가장 먼저 보고, 지연과 승인 대기를 빠르게 판단할 수 있는 운영 관제 화면입니다."
+        description="숫자와 리스크를 가장 먼저 보는 운영 관제 화면입니다."
       >
         <ErrorState
           title="대표 대시보드를 열 수 없습니다"
@@ -95,7 +109,7 @@ export default async function DashboardPage() {
       currentPath="/dashboard"
       session={session}
       title="대표 대시보드"
-      description="숫자, 승인 대기, 지연 리스크를 한 흐름으로 보고 즉시 판단할 수 있도록 대표 관점으로 재정렬했습니다."
+      description="숫자, 승인 대기, 지연 리스크를 한 흐름으로 보고 즉시 판단할 수 있도록 정렬했습니다."
     >
       <div className="space-y-6">
         <section className="panel-strong relative overflow-hidden p-6 sm:p-8">
@@ -110,11 +124,11 @@ export default async function DashboardPage() {
 
               <div className="space-y-3">
                 <h2 className="text-3xl font-semibold tracking-tight text-ink-950 sm:text-[2.2rem]">
-                  실행 속도와 통제 신호를 같은 시야에 두는 CEO 운영 뷰
+                  실행 속도와 통제 신호를 한 화면에서 보는 CEO 운영 뷰
                 </h2>
                 <p className="max-w-3xl text-sm leading-7 text-ink-700">
                   먼저 숫자를 보고, 다음으로 긴급 건과 승인 대기, 그다음 지연 흐름과 최근 업데이트를
-                  확인하도록 정보 계층을 조정했습니다.
+                  확인할 수 있도록 정보 계층을 재구성했습니다.
                 </p>
               </div>
 
@@ -146,7 +160,7 @@ export default async function DashboardPage() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-700">Executive Flow</p>
               <div className="mt-4 space-y-3">
                 {[
-                  ["숫자 보기", "전체 · 진행 · 지연 · 완료 · 긴급 KPI로 운영 속도를 확인합니다."],
+                  ["숫자 보기", "전체, 진행, 지연, 완료, 긴급 KPI로 운영 속도를 먼저 확인합니다."],
                   ["긴급 확인", "대표가 바로 열어야 하는 긴급 건을 첫 번째 레이어에 배치했습니다."],
                   ["승인 판단", "완료 요청 대기를 별도 섹션으로 묶어 결재 흐름을 분리했습니다."],
                   ["리스크 감시", "지연 건과 최근 업데이트를 운영 리스크 뷰로 분리했습니다."],
@@ -176,7 +190,7 @@ export default async function DashboardPage() {
           <SectionCard
             accent="danger"
             title="대표 우선 확인"
-            description="긴급 레벨과 마감일, 주관 부서를 함께 보여 즉시 판단이 필요한 건을 가장 먼저 보이게 했습니다."
+            description="긴급도, 마감일, 주관 부서를 함께 보여 즉시 판단이 필요한 건을 먼저 보이게 했습니다."
             action={<Badge tone="danger">{`${dashboard.urgentItems.length}건`}</Badge>}
           >
             {dashboard.urgentItems.length === 0 ? (
@@ -195,15 +209,14 @@ export default async function DashboardPage() {
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone="danger">{`L${item.urgentLevel ?? 1}`}</Badge>
+                          <Badge tone="danger">{formatUrgentLevel(item.urgentLevel)}</Badge>
                           <Badge tone="muted">{item.directiveNo}</Badge>
                           <Badge tone="warning">{`마감 ${formatDateLabel(item.dueDate)}`}</Badge>
                         </div>
                         <div>
                           <p className="text-lg font-semibold tracking-tight text-ink-950">{item.title}</p>
                           <p className="mt-2 text-sm leading-6 text-ink-700">
-                            {item.targetScope === "ALL" ? "전사 대상" : `대상 ${item.targetDepartmentCount}개 부서`} · 주관{" "}
-                            {item.ownerDepartmentName ?? "미지정"}
+                            {describeTarget(item)}
                             {item.ownerUserName ? ` · 담당 ${item.ownerUserName}` : ""}
                           </p>
                         </div>
@@ -245,7 +258,7 @@ export default async function DashboardPage() {
                     </div>
                     <p className="mt-3 text-base font-semibold text-ink-950">{item.title}</p>
                     <p className="mt-2 text-sm leading-6 text-ink-700">
-                      대상 {item.targetDepartmentCount}개 부서 · 완료 요청 {item.departmentProgress.COMPLETION_REQUESTED}곳
+                      {`대상 ${item.targetDepartmentCount}개 부서 · 완료 요청 ${item.departmentProgress.COMPLETION_REQUESTED}곳`}
                     </p>
                   </Link>
                 ))}
@@ -258,7 +271,7 @@ export default async function DashboardPage() {
           <SectionCard
             accent="warning"
             title="운영 리스크"
-            description="지연 신호가 난 건을 우선순위 높은 리스트로 정리해 리스크 레이어를 별도로 만들었습니다."
+            description="지연 신호가 난 건을 우선순위 높은 리스트로 정리해 리스크 레이어를 따로 만들었습니다."
             action={<Badge tone="warning">{`${dashboard.delayedItems.length}건`}</Badge>}
           >
             {dashboard.delayedItems.length === 0 ? (
@@ -282,7 +295,7 @@ export default async function DashboardPage() {
                         </div>
                         <p className="mt-3 text-base font-semibold text-ink-950">{item.title}</p>
                         <p className="mt-2 text-sm leading-6 text-ink-700">
-                          주관 {item.ownerDepartmentName ?? "미지정"} · 지연 부서 {item.departmentProgress.DELAYED}곳
+                          {`주관 ${item.ownerDepartmentName ?? "미지정"} · 지연 부서 ${item.departmentProgress.DELAYED}곳`}
                         </p>
                       </div>
                       <div className="rounded-[20px] bg-warning-50 px-4 py-3 text-right">
@@ -299,7 +312,7 @@ export default async function DashboardPage() {
           <SectionCard
             accent="brand"
             title="최근 업데이트"
-            description="최근 실행 흐름을 텍스트 밀도 낮춘 타임라인 구조로 정리해 빠르게 읽히도록 했습니다."
+            description="최근 실행 흐름을 텍스트 밀도를 낮춘 타임라인 구조로 정리해 빠르게 읽히게 했습니다."
             action={<Badge tone="default">{`${dashboard.recentUpdates.length}건`}</Badge>}
           >
             {dashboard.recentUpdates.length === 0 ? (

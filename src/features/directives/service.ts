@@ -14,6 +14,7 @@ import { recordHistory } from "@/lib/history";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import { sanitizeFileName } from "@/lib/utils";
 
+import { normalizeUrgentLevel } from "./schemas";
 import type {
   CreateDirectiveInput,
   CreateDirectiveLogInput,
@@ -1154,6 +1155,7 @@ export async function createDirectiveAsSession(session: AppSession, input: Creat
 
   const client = createSupabaseServerClient();
   const now = new Date().toISOString();
+  const normalizedUrgentLevel = input.isUrgent ? normalizeUrgentLevel(input.urgentLevel) : null;
   const activeDepartments = await loadActiveDepartments(client);
   const activeDepartmentIds = activeDepartments.map((department) => department.id);
   const activeDepartmentsMap = new Map(activeDepartments.map((department) => [department.id, department]));
@@ -1201,7 +1203,7 @@ export async function createDirectiveAsSession(session: AppSession, input: Creat
         sequence: generatedDirectiveNumber.sequence,
         status: "NEW",
         title: input.title,
-        urgent_level: input.urgentLevel,
+        urgent_level: normalizedUrgentLevel,
         year_month: buildYearMonthValue(now),
       })
       .select("*")
@@ -1312,7 +1314,7 @@ export async function listDirectivesForSession(
 
   query = query
     .order("is_urgent", { ascending: false })
-    .order("urgent_level", { ascending: false, nullsFirst: false })
+    .order("urgent_level", { ascending: true, nullsFirst: false })
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
 
@@ -1878,7 +1880,7 @@ async function loadDirectiveItemsForDashboard(client: SupabaseClient, session: A
 
   const { data, error } = await query
     .order("is_urgent", { ascending: false })
-    .order("urgent_level", { ascending: false, nullsFirst: false })
+    .order("urgent_level", { ascending: true, nullsFirst: false })
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
 

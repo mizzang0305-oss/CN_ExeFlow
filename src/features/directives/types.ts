@@ -1,9 +1,10 @@
 import type { JsonObject } from "@/types";
 
-import type { directiveLogTypes, directiveStatuses } from "./constants";
+import type { directiveLogTypes, directiveStatuses, directiveUrgentLevels } from "./constants";
 
 export type DirectiveStatus = (typeof directiveStatuses)[number];
 export type DirectiveLogType = (typeof directiveLogTypes)[number];
+export type DirectiveUrgentLevel = (typeof directiveUrgentLevels)[number];
 export type DirectiveTargetScope = "ALL" | "SELECTED";
 export type DirectiveDepartmentAssignmentRole = "OWNER" | "SUPPORT" | "REFERENCE";
 
@@ -20,7 +21,7 @@ export interface DirectiveRow {
   owner_user_id: string | null;
   status: DirectiveStatus;
   title: string;
-  urgent_level: number | null;
+  urgent_level: DirectiveUrgentLevel | null;
 }
 
 export interface DirectiveDepartmentRow {
@@ -114,7 +115,7 @@ export interface CreateDirectiveInput {
   selectedDepartmentIds: string[];
   targetScope: DirectiveTargetScope;
   title: string;
-  urgentLevel: number | null;
+  urgentLevel: DirectiveUrgentLevel | null;
 }
 
 export interface CreateDirectiveLogInput {
@@ -165,7 +166,7 @@ export interface DirectiveListItem extends DirectiveActivitySummary {
   targetDepartmentCount: number;
   targetScope: DirectiveTargetScope;
   title: string;
-  urgentLevel: number | null;
+  urgentLevel: DirectiveUrgentLevel | null;
 }
 
 export interface DirectiveLogMeta {
@@ -265,7 +266,7 @@ export interface DirectiveDetail extends DirectiveActivitySummary {
   targetDepartmentCount: number;
   targetScope: DirectiveTargetScope;
   title: string;
-  urgentLevel: number | null;
+  urgentLevel: DirectiveUrgentLevel | null;
   workflow: DirectiveWorkflowFlags;
 }
 

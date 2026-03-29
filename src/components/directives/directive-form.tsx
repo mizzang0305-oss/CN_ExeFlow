@@ -102,7 +102,7 @@ export function DirectiveForm({ departments, users }: DirectiveFormProps) {
           selectedDepartmentIds: resolvedSelectedDepartmentIds,
           targetScope,
           title: String(formData.get("title") ?? ""),
-          urgentLevel: isUrgent ? Number(formData.get("urgentLevel") ?? 1) : null,
+          urgentLevel: isUrgent ? String(formData.get("urgentLevel") ?? "") : null,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -280,10 +280,10 @@ export function DirectiveForm({ departments, users }: DirectiveFormProps) {
           {isUrgent ? (
             <FieldGroup>
               <FieldLabel label="긴급 레벨" />
-              <Select name="urgentLevel" defaultValue="2">
-                <option value="1">L1</option>
-                <option value="2">L2</option>
-                <option value="3">L3</option>
+              <Select name="urgentLevel" defaultValue="HIGH">
+                <option value="LOW">L1 · LOW</option>
+                <option value="HIGH">L2 · HIGH</option>
+                <option value="CRITICAL">L3 · CRITICAL</option>
               </Select>
             </FieldGroup>
           ) : null}
