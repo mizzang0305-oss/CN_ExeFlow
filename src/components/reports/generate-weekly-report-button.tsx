@@ -30,8 +30,8 @@ export function GenerateWeeklyReportButton() {
 
   return (
     <div className="space-y-2">
-      <Button size="md" onClick={handleGenerate} disabled={isPending}>
-        {isPending ? "생성 중..." : "이번 주 결산 생성"}
+      <Button size="md" onClick={handleGenerate} isLoading={isPending} loadingLabel="결산 생성 중">
+        이번 주 결산 생성
       </Button>
       {error ? <p className="text-sm text-danger-700">{error}</p> : null}
     </div>

@@ -190,8 +190,13 @@ export function LogForm({ defaultDepartmentId, departments, directiveId, initial
           <Link href={`/directives/${directiveId}`} className="text-sm font-semibold text-ink-500">
             상세로 돌아가기
           </Link>
-          <Button type="submit" size="lg" disabled={isPending}>
-            {isPending ? "저장 중..." : isEdit ? "수정 저장" : "로그 저장"}
+          <Button
+            type="submit"
+            size="lg"
+            isLoading={isPending}
+            loadingLabel={isEdit ? "로그 수정 중" : "로그 저장 중"}
+          >
+            {isEdit ? "수정 저장" : "로그 저장"}
           </Button>
         </div>
       </form>

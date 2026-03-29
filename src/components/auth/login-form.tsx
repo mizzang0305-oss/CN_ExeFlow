@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldGroup, FieldLabel, Select } from "@/components/ui/field";
+import { SkeletonBlock } from "@/components/ui/skeleton-block";
+import { StatusPill } from "@/components/ui/status-pill";
 
 async function fetchApi<T>(input: RequestInfo, init?: RequestInit) {
   const response = await fetch(input, {
@@ -123,10 +125,21 @@ export function LoginForm() {
 
   if (bootstrapStatus === "loading") {
     return (
-      <Card className="mx-auto w-full max-w-xl p-8">
-        <div className="space-y-3">
-          <CardTitle>접속 준비 중</CardTitle>
-          <CardDescription>부서와 사용자 목록을 불러오고 있습니다.</CardDescription>
+      <Card className="mx-auto w-full max-w-xl border-white/90 bg-white/94 p-6 sm:p-8">
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <StatusPill tone="default">Access Sync</StatusPill>
+            <div className="space-y-2">
+              <CardTitle>접속 준비 중</CardTitle>
+              <CardDescription>부서와 사용자 목록을 불러오며 진입 환경을 정렬하고 있습니다.</CardDescription>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <SkeletonBlock className="h-24 rounded-[28px]" />
+            <SkeletonBlock className="h-24 rounded-[28px]" />
+            <SkeletonBlock className="h-16 rounded-[24px]" />
+          </div>
         </div>
       </Card>
     );
@@ -138,7 +151,7 @@ export function LoginForm() {
         title="로그인 준비 정보를 불러오지 못했습니다"
         description={errorMessage ?? "부서와 사용자 기본 정보를 다시 불러와 주세요."}
         action={
-          <Button size="md" onClick={() => void loadBootstrap()}>
+          <Button size="md" variant="secondary" onClick={() => void loadBootstrap()}>
             다시 시도
           </Button>
         }
@@ -147,64 +160,96 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="mx-auto w-full max-w-xl p-6 sm:p-8">
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-            2단계 빠른 진입
-          </span>
-          <CardTitle>부서를 고르고 사용자로 바로 진입합니다</CardTitle>
-          <CardDescription>
-            부서와 사용자를 선택하면 역할에 맞는 화면으로 바로 이동합니다.
-          </CardDescription>
+    <Card className="mx-auto w-full max-w-xl border-white/90 bg-white/96 p-6 shadow-[0_32px_90px_rgba(3,19,38,0.12)] sm:p-8">
+      <div className="space-y-8">
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <StatusPill tone="default">2단계 빠른 진입</StatusPill>
+            <StatusPill tone={usersStatus === "loading" ? "warning" : "success"}>
+              {usersStatus === "loading" ? "사용자 동기화 중" : "역할별 즉시 진입"}
+            </StatusPill>
+          </div>
+          <div className="space-y-2">
+            <CardTitle>운영 통제 플랫폼 진입</CardTitle>
+            <CardDescription>
+              부서와 사용자를 선택하면 역할에 맞는 실행 화면으로 즉시 이동합니다.
+            </CardDescription>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[24px] border border-brand-100 bg-brand-50/75 px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brand-700">Department</p>
+              <p className="mt-2 text-sm font-semibold text-ink-950">부서 기준 진입</p>
+            </div>
+            <div className="rounded-[24px] border border-ink-200/80 bg-ink-100/70 px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-600">Role</p>
+              <p className="mt-2 text-sm font-semibold text-ink-950">권한별 홈 자동 연결</p>
+            </div>
+            <div className="rounded-[24px] border border-ink-200/80 bg-ink-100/70 px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-600">Evidence</p>
+              <p className="mt-2 text-sm font-semibold text-ink-950">로그와 증빙 흐름 이어짐</p>
+            </div>
+          </div>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <FieldGroup>
-            <FieldLabel label="1. 부서 선택" required />
-            <Select
-              name="departmentId"
-              value={departmentId}
-              onChange={(event) => {
-                setDepartmentId(event.target.value);
-                setUserId("");
-              }}
-            >
-              <option value="">부서를 선택해 주세요</option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
-            </Select>
-          </FieldGroup>
+        <form className="space-y-5" onSubmit={handleSubmit}>
+          <div className="grid gap-4">
+            <div className="rounded-[28px] border border-brand-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(238,244,255,0.86))] p-4">
+              <FieldGroup className="space-y-3">
+                <FieldLabel label="1. 부서 선택" required hint="로그인 가능한 부서를 먼저 선택합니다." />
+                <Select
+                  name="departmentId"
+                  value={departmentId}
+                  onChange={(event) => {
+                    setDepartmentId(event.target.value);
+                    setUserId("");
+                  }}
+                >
+                  <option value="">부서를 선택해 주세요</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </Select>
+              </FieldGroup>
+            </div>
 
-          <FieldGroup>
-            <FieldLabel label="2. 사용자 선택" required />
-            <Select
-              name="userId"
-              value={userId}
-              onChange={(event) => setUserId(event.target.value)}
-              disabled={!departmentId || usersStatus === "loading"}
-            >
-              <option value="">
-                {usersStatus === "loading" ? "사용자 불러오는 중" : "사용자를 선택해 주세요"}
-              </option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.displayName} · {user.role}
-                </option>
-              ))}
-            </Select>
-          </FieldGroup>
+            <div className="rounded-[28px] border border-ink-200/80 bg-white/92 p-4">
+              <FieldGroup className="space-y-3">
+                <FieldLabel label="2. 사용자 선택" required hint="선택한 부서의 활성 사용자만 표시합니다." />
+                <Select
+                  name="userId"
+                  value={userId}
+                  onChange={(event) => setUserId(event.target.value)}
+                  disabled={!departmentId || usersStatus === "loading"}
+                >
+                  <option value="">
+                    {usersStatus === "loading" ? "사용자 불러오는 중" : "사용자를 선택해 주세요"}
+                  </option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.displayName} · {user.role}
+                    </option>
+                  ))}
+                </Select>
+              </FieldGroup>
+            </div>
+          </div>
 
           {selectedDepartment ? (
-            <div className="rounded-3xl border border-brand-100 bg-brand-50/70 px-4 py-4 text-sm text-ink-700">
-              <p className="font-semibold text-ink-950">{selectedDepartment.name}</p>
-              <p className="mt-1">
-                활성 사용자 {users.length}명
-                {selectedDepartment.headUserName ? ` · 부서장 ${selectedDepartment.headUserName}` : ""}
-              </p>
+            <div className="rounded-[28px] border border-brand-100/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(238,244,255,0.82))] px-5 py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-ink-950">{selectedDepartment.name}</p>
+                  <p className="mt-1 text-sm text-ink-700">
+                    활성 사용자 {users.length}명
+                    {selectedDepartment.headUserName ? ` · 부서장 ${selectedDepartment.headUserName}` : ""}
+                  </p>
+                </div>
+                <StatusPill tone={usersStatus === "loading" ? "warning" : "default"}>
+                  {usersStatus === "loading" ? "사용자 목록 갱신 중" : `${selectedDepartment.userCount}명 등록`}
+                </StatusPill>
+              </div>
             </div>
           ) : null}
 
@@ -216,16 +261,20 @@ export function LoginForm() {
           ) : null}
 
           {submitError ? (
-            <div className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700">{submitError}</div>
+            <div className="rounded-[24px] border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+              {submitError}
+            </div>
           ) : null}
 
           <Button
             type="submit"
             block
             size="lg"
-            disabled={!departmentId || !userId || isSubmitting || usersStatus === "loading"}
+            disabled={!departmentId || !userId || usersStatus === "loading"}
+            isLoading={isSubmitting}
+            loadingLabel="CN EXEFLOW 입장 중"
           >
-            {isSubmitting ? "접속 중..." : "CN EXEFLOW 시작"}
+            CN EXEFLOW 시작
           </Button>
         </form>
       </div>

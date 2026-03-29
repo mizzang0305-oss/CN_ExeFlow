@@ -294,8 +294,8 @@ export function DirectiveForm({ departments, users }: DirectiveFormProps) {
         ) : null}
 
         <div className="flex justify-end">
-          <Button type="submit" size="lg" disabled={isPending}>
-            {isPending ? "등록 중..." : "지시사항 등록"}
+          <Button type="submit" size="lg" isLoading={isPending} loadingLabel="지시 등록 중">
+            지시사항 등록
           </Button>
         </div>
       </form>

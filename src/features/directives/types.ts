@@ -270,6 +270,7 @@ export interface DirectiveDetail extends DirectiveActivitySummary {
 }
 
 export interface DashboardKpi {
+  description?: string;
   label: string;
   tone: "danger" | "default" | "muted" | "success" | "warning";
   value: number;
@@ -287,6 +288,7 @@ export interface DashboardRecentUpdate {
 
 export interface DashboardData {
   delayedItems: DirectiveListItem[];
+  items: DirectiveListItem[];
   kpis: DashboardKpi[];
   recentUpdates: DashboardRecentUpdate[];
   urgentItems: DirectiveListItem[];
@@ -295,6 +297,7 @@ export interface DashboardData {
 
 export interface DepartmentBoardData {
   dueSoonItems: DirectiveListItem[];
+  items: DirectiveListItem[];
   kpis: DashboardKpi[];
   missingEvidenceItems: DirectiveListItem[];
   recentUpdates: DashboardRecentUpdate[];

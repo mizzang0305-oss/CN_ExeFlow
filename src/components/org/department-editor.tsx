@@ -237,8 +237,13 @@ export function DepartmentEditor({
           </div>
 
           <div className="md:col-span-2 flex flex-wrap gap-2">
-            <Button type="submit" size="md" disabled={pending}>
-              {pending ? "저장 중..." : mode.type === "edit" ? "부서 저장" : "부서 생성"}
+            <Button
+              type="submit"
+              size="md"
+              isLoading={pending}
+              loadingLabel={mode.type === "edit" ? "부서 저장 중" : "부서 생성 중"}
+            >
+              {mode.type === "edit" ? "부서 저장" : "부서 생성"}
             </Button>
             {mode.type !== "edit" ? (
               <Button type="button" size="md" variant="ghost" onClick={onCancelCreate} disabled={pending}>

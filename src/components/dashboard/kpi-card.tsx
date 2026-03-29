@@ -1,17 +1,58 @@
+import { cn } from "@/lib/utils";
+
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
 type KpiCardProps = {
+  description?: string;
   label: string;
   tone: "danger" | "default" | "muted" | "success" | "warning";
   value: number;
 };
 
-export function KpiCard({ label, tone, value }: KpiCardProps) {
+const accentBarClassMap: Record<KpiCardProps["tone"], string> = {
+  danger: "from-danger-600 to-danger-200",
+  default: "from-brand-600 to-brand-200",
+  muted: "from-ink-500 to-ink-200",
+  success: "from-success-600 to-success-200",
+  warning: "from-warning-600 to-warning-200",
+};
+
+const toneClassMap: Record<KpiCardProps["tone"], string> = {
+  danger:
+    "border-danger-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,241,241,0.9))]",
+  default:
+    "border-brand-100/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(238,244,255,0.92))]",
+  muted:
+    "border-ink-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(242,246,252,0.92))]",
+  success:
+    "border-success-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(241,255,246,0.9))]",
+  warning:
+    "border-warning-200/85 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,249,236,0.92))]",
+};
+
+const numberFormatter = new Intl.NumberFormat("ko-KR");
+
+export function KpiCard({ description, label, tone, value }: KpiCardProps) {
   return (
-    <Card className="space-y-4">
-      <Badge tone={tone}>{label}</Badge>
-      <div className="text-3xl font-semibold tracking-tight text-ink-950">{value}</div>
+    <Card className={cn("overflow-hidden", toneClassMap[tone])}>
+      <div className="space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <Badge tone={tone}>{label}</Badge>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-500">Live</span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-4xl font-semibold tracking-tight text-ink-950">
+            {numberFormatter.format(value)}
+          </div>
+          {description ? <p className="text-sm leading-6 text-ink-700">{description}</p> : null}
+        </div>
+
+        <div className="h-2 rounded-full bg-white/70">
+          <div className={cn("h-full w-3/4 rounded-full bg-gradient-to-r", accentBarClassMap[tone])} />
+        </div>
+      </div>
     </Card>
   );
 }

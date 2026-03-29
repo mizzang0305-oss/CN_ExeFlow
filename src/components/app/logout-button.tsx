@@ -22,8 +22,15 @@ export function LogoutButton() {
   }
 
   return (
-    <Button variant="ghost" size="sm" onClick={handleLogout} disabled={isPending}>
-      {isPending ? "정리 중..." : "로그아웃"}
+    <Button
+      variant="ghost"
+      size="sm"
+      className="border-white/12 bg-white/8 text-white hover:bg-white/14"
+      onClick={handleLogout}
+      isLoading={isPending}
+      loadingLabel="로그아웃 중"
+    >
+      로그아웃
     </Button>
   );
 }
