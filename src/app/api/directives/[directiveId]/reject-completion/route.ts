@@ -32,6 +32,7 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
     const { directiveId } = await context.params;
     const body = await readJsonBody(request, { required: false });
     const parsed = workflowReasonSchema.safeParse({
+      departmentId: typeof body.departmentId === "string" ? body.departmentId : null,
       reason: typeof body.reason === "string" ? body.reason : null,
     });
 
@@ -43,11 +44,16 @@ export async function POST(request: Request, context: WorkflowRouteContext) {
     }
 
     await rejectDirectiveCompletionAsSession(session, {
+      departmentId: parsed.data.departmentId,
       directiveId,
       reason: parsed.data.reason,
     });
 
-    return createApiSuccessResponse({ directiveId, status: "REJECTED" });
+    return createApiSuccessResponse({
+      departmentId: parsed.data.departmentId,
+      directiveId,
+      status: "REJECTED",
+    });
   } catch (error) {
     return handleApiError(error);
   }

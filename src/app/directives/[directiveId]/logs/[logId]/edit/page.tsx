@@ -51,7 +51,13 @@ export default async function EditDirectiveLogPage({ params }: EditDirectiveLogP
           </p>
         </Card>
       ) : (
-        <LogForm directiveId={directive.id} initialLog={targetLog} mode="edit" />
+        <LogForm
+          defaultDepartmentId={directive.workflow.currentDepartmentId}
+          departments={directive.departments}
+          directiveId={directive.id}
+          initialLog={targetLog}
+          mode="edit"
+        />
       )}
     </AppFrame>
   );

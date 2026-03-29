@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
-import type { DirectiveLogItem } from "@/features/directives/types";
+import type { DirectiveDepartmentProgress, DirectiveLogItem } from "@/features/directives/types";
 import { directiveLogTypeLabels } from "@/features/directives/constants";
 import { readApiResponse } from "@/lib/api";
 
@@ -24,6 +24,8 @@ const logTypeOptions = [
 ] as const;
 
 type LogFormProps = {
+  defaultDepartmentId: string | null;
+  departments: DirectiveDepartmentProgress[];
   directiveId: string;
   initialLog?: DirectiveLogItem;
   mode: "create" | "edit";
@@ -41,20 +43,35 @@ function toDateTimeLocalValue(value: string | null | undefined) {
   return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
 }
 
-export function LogForm({ directiveId, initialLog, mode }: LogFormProps) {
+export function LogForm({ defaultDepartmentId, departments, directiveId, initialLog, mode }: LogFormProps) {
   const router = useRouter();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isEdit = mode === "edit";
+  const [departmentId, setDepartmentId] = useState(
+    initialLog?.departmentId ?? defaultDepartmentId ?? departments[0]?.departmentId ?? "",
+  );
+  const selectableDepartments = useMemo(
+    () => departments.filter((department) => department.departmentId),
+    [departments],
+  );
+  const allowDepartmentSelect = selectableDepartments.length > 1 && !defaultDepartmentId;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+
+    if (!departmentId) {
+      setError("로그를 남길 부서를 선택해 주세요.");
+      return;
+    }
+
     setIsPending(true);
 
     try {
       const form = event.currentTarget;
       const formData = new FormData(form);
+      formData.set("departmentId", departmentId);
       const response = await fetch(
         isEdit
           ? `/api/directives/${directiveId}/logs/${initialLog?.id}`
@@ -79,11 +96,27 @@ export function LogForm({ directiveId, initialLog, mode }: LogFormProps) {
       <div className="space-y-2">
         <CardTitle>{isEdit ? "행동 로그 수정" : "행동 로그 등록"}</CardTitle>
         <CardDescription>
-          현장에서 바로 남길 수 있도록 필요한 항목만 묶었습니다. 사진과 문서는 한 번에 여러 개 첨부할 수 있습니다.
+          현장에서 바로 적을 수 있도록 핵심 항목만 남겼습니다. 선택한 부서의 실행 이력과 증빙이 즉시 상세 화면에 반영됩니다.
         </CardDescription>
       </div>
 
       <form className="space-y-4" onSubmit={handleSubmit}>
+        {allowDepartmentSelect ? (
+          <FieldGroup>
+            <FieldLabel label="로그 부서" required hint="여러 부서가 배정된 지시일 때만 선택합니다." />
+            <Select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
+              {selectableDepartments.map((department) => (
+                <option key={department.departmentId} value={department.departmentId}>
+                  {department.departmentName ?? "부서 미지정"}
+                  {department.isPrimary ? " · 주관" : " · 협조"}
+                </option>
+              ))}
+            </Select>
+          </FieldGroup>
+        ) : (
+          <input type="hidden" name="departmentId" value={departmentId} />
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup>
             <FieldLabel label="로그 유형" required />
@@ -107,14 +140,10 @@ export function LogForm({ directiveId, initialLog, mode }: LogFormProps) {
         </div>
 
         <FieldGroup>
-          <FieldLabel
-            label="행동 요약"
-            required
-            hint="10초 안에 읽히는 짧은 문장으로 적어 주세요."
-          />
+          <FieldLabel label="행동 요약" required hint="10초 안에 읽히는 문장으로 적어 주세요." />
           <Input
             name="actionSummary"
-            placeholder="예: 현장 점검 후 간판 교체 일정 확정"
+            placeholder="예: 매장 입구 POP 교체 일정 확정"
             defaultValue={initialLog?.actionSummary ?? ""}
           />
         </FieldGroup>

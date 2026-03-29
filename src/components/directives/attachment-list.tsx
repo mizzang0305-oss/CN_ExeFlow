@@ -42,7 +42,8 @@ export function AttachmentList({ attachments }: { attachments: DirectiveAttachme
           <div className="space-y-1">
             <p className="line-clamp-1 text-sm font-semibold text-ink-950">{attachment.fileName}</p>
             <p className="text-xs text-ink-500">
-              업로드: {attachment.uploadedByName ?? "사용자 미확인"}
+              업로드 {attachment.uploadedByName ?? "사용자 미확인"}
+              {attachment.departmentName ? ` · ${attachment.departmentName}` : ""}
             </p>
           </div>
 

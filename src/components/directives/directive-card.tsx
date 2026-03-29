@@ -7,6 +7,18 @@ import { Card } from "@/components/ui/card";
 import { DirectiveStatusBadge } from "./directive-status-badge";
 import { UrgencyBadge } from "./urgency-badge";
 
+function describeTarget(directive: DirectiveListItem) {
+  if (directive.targetScope === "ALL") {
+    return `전사 대상 · 주관 ${directive.ownerDepartmentName ?? "미지정"}`;
+  }
+
+  if (directive.targetDepartmentCount <= 1) {
+    return directive.ownerDepartmentName ?? "대상 부서 미지정";
+  }
+
+  return `주관 ${directive.ownerDepartmentName ?? "미지정"} · 협조 ${directive.supportDepartmentCount}개 부서`;
+}
+
 export function DirectiveCard({ directive }: { directive: DirectiveListItem }) {
   return (
     <Link href={`/directives/${directive.id}`} className="block">
@@ -27,12 +39,12 @@ export function DirectiveCard({ directive }: { directive: DirectiveListItem }) {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold tracking-tight text-ink-950">{directive.title}</h2>
             <p className="text-sm text-ink-700">
-              {directive.ownerDepartmentName ?? "미지정 부서"}
+              {describeTarget(directive)}
               {directive.ownerUserName ? ` · ${directive.ownerUserName}` : ""}
             </p>
           </div>
 
-          <div className="grid gap-3 text-sm text-ink-700 sm:grid-cols-4">
+          <div className="grid gap-3 text-sm text-ink-700 sm:grid-cols-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">마감일</p>
               <p className={directive.isDelayed ? "mt-1 font-semibold text-danger-700" : "mt-1"}>
@@ -44,12 +56,18 @@ export function DirectiveCard({ directive }: { directive: DirectiveListItem }) {
               <p className="mt-1">{formatRelativeUpdate(directive.lastActivityAt)}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">실행 로그</p>
-              <p className="mt-1">{directive.logCount}건</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">대상 부서</p>
+              <p className="mt-1">{directive.targetDepartmentCount}곳</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">증빙</p>
-              <p className="mt-1">{directive.attachmentCount}건</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">완료/대기</p>
+              <p className="mt-1">
+                {directive.departmentProgress.COMPLETED} 완료 · {directive.departmentProgress.COMPLETION_REQUESTED} 대기
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">지연 부서</p>
+              <p className="mt-1">{directive.departmentProgress.DELAYED}곳</p>
             </div>
           </div>
         </div>

@@ -4,6 +4,8 @@ import type { directiveLogTypes, directiveStatuses } from "./constants";
 
 export type DirectiveStatus = (typeof directiveStatuses)[number];
 export type DirectiveLogType = (typeof directiveLogTypes)[number];
+export type DirectiveTargetScope = "ALL" | "SELECTED";
+export type DirectiveDepartmentAssignmentRole = "OWNER" | "SUPPORT" | "REFERENCE";
 
 export interface DirectiveRow {
   content: string;
@@ -23,6 +25,7 @@ export interface DirectiveRow {
 
 export interface DirectiveDepartmentRow {
   assigned_at: string | null;
+  assignment_role?: DirectiveDepartmentAssignmentRole | null;
   created_at: string;
   department_closed_at: string | null;
   department_due_date: string | null;
@@ -31,6 +34,7 @@ export interface DirectiveDepartmentRow {
   department_status: DirectiveStatus;
   directive_id: string;
   id: string;
+  is_primary?: boolean | null;
   updated_at: string | null;
 }
 
@@ -105,8 +109,10 @@ export interface CreateDirectiveInput {
   content: string;
   dueDate: string | null;
   isUrgent: boolean;
-  ownerDepartmentId: string;
   ownerUserId: string | null;
+  primaryDepartmentId: string;
+  selectedDepartmentIds: string[];
+  targetScope: DirectiveTargetScope;
   title: string;
   urgentLevel: number | null;
 }
@@ -114,6 +120,7 @@ export interface CreateDirectiveInput {
 export interface CreateDirectiveLogInput {
   actionSummary: string;
   detail: string | null;
+  departmentId: string | null;
   directiveId: string;
   happenedAt: string;
   logType: DirectiveLogType;
@@ -132,6 +139,7 @@ export interface DeleteDirectiveLogInput {
 }
 
 export interface WorkflowDecisionInput {
+  departmentId: string | null;
   directiveId: string;
   reason: string | null;
 }
@@ -143,6 +151,7 @@ export interface DirectiveActivitySummary {
 }
 
 export interface DirectiveListItem extends DirectiveActivitySummary {
+  departmentProgress: Record<DirectiveStatus, number>;
   directiveNo: string;
   dueDate: string | null;
   id: string;
@@ -152,6 +161,9 @@ export interface DirectiveListItem extends DirectiveActivitySummary {
   ownerDepartmentName: string | null;
   ownerUserName: string | null;
   status: DirectiveStatus;
+  supportDepartmentCount: number;
+  targetDepartmentCount: number;
+  targetScope: DirectiveTargetScope;
   title: string;
   urgentLevel: number | null;
 }
@@ -188,6 +200,8 @@ export interface DirectiveLogItem {
 
 export interface DirectiveAttachmentItem {
   downloadUrl: string | null;
+  departmentId: string | null;
+  departmentName: string | null;
   fileName: string;
   fileSize: number | null;
   fileType: "DOCUMENT" | "IMAGE" | "OTHER";
@@ -201,12 +215,30 @@ export interface DirectiveAttachmentItem {
 }
 
 export interface DirectiveWorkflowFlags {
-  canApprove: boolean;
   canCreateDirective: boolean;
   canManageLogs: boolean;
-  canReject: boolean;
+  canManageMultipleDepartments: boolean;
   canRequestCompletion: boolean;
+  currentDepartmentId: string | null;
   isReadOnly: boolean;
+}
+
+export interface DirectiveDepartmentProgress {
+  assignmentRole: DirectiveDepartmentAssignmentRole;
+  assignedAt: string | null;
+  attachmentCount: number;
+  departmentCode: string | null;
+  departmentHeadId: string | null;
+  departmentHeadName: string | null;
+  departmentId: string;
+  departmentName: string | null;
+  departmentStatus: DirectiveStatus;
+  dueDate: string | null;
+  isCurrentDepartment: boolean;
+  isPrimary: boolean;
+  isRequestableByCurrentUser: boolean;
+  lastActivityAt: string | null;
+  logCount: number;
 }
 
 export interface DirectiveDetail extends DirectiveActivitySummary {
@@ -221,12 +253,17 @@ export interface DirectiveDetail extends DirectiveActivitySummary {
   isArchived: boolean;
   isDelayed: boolean;
   isUrgent: boolean;
+  departments: DirectiveDepartmentProgress[];
+  departmentProgress: Record<DirectiveStatus, number>;
   logs: DirectiveLogItem[];
   ownerDepartmentId: string | null;
   ownerDepartmentName: string | null;
   ownerUserId: string | null;
   ownerUserName: string | null;
   status: DirectiveStatus;
+  supportDepartmentCount: number;
+  targetDepartmentCount: number;
+  targetScope: DirectiveTargetScope;
   title: string;
   urgentLevel: number | null;
   workflow: DirectiveWorkflowFlags;

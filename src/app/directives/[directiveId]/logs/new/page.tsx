@@ -8,11 +8,15 @@ type NewDirectiveLogPageProps = {
   params: Promise<{
     directiveId: string;
   }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function NewDirectiveLogPage({ params }: NewDirectiveLogPageProps) {
+export default async function NewDirectiveLogPage({ params, searchParams }: NewDirectiveLogPageProps) {
   const session = await requireCurrentSession();
   const { directiveId } = await params;
+  const resolvedSearchParams = await searchParams;
+  const requestedDepartmentId =
+    typeof resolvedSearchParams.departmentId === "string" ? resolvedSearchParams.departmentId : null;
 
   let directive: Awaited<ReturnType<typeof getDirectiveDetailForSession>> | null = null;
   let errorMessage: string | null = null;
@@ -40,7 +44,16 @@ export default async function NewDirectiveLogPage({ params }: NewDirectiveLogPag
           <p className="text-sm text-danger-700">{errorMessage}</p>
         </Card>
       ) : (
-        <LogForm directiveId={directive.id} mode="create" />
+        <LogForm
+          defaultDepartmentId={
+            requestedDepartmentId && directive.departments.some((department) => department.departmentId === requestedDepartmentId)
+              ? requestedDepartmentId
+              : directive.workflow.currentDepartmentId
+          }
+          departments={directive.departments}
+          directiveId={directive.id}
+          mode="create"
+        />
       )}
     </AppFrame>
   );
