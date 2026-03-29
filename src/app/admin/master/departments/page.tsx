@@ -1,17 +1,17 @@
 import { AppFrame, Card } from "@/components";
-import { DepartmentMasterClient } from "@/components/master/department-master-client";
+import { OrgAdminClient } from "@/components/org/org-admin-client";
 import { requireAdminSession } from "@/features/auth";
-import { listMasterLookupData } from "@/features/master";
+import { listOrgTreeData } from "@/features/master";
 
 export const dynamic = "force-dynamic";
 
 export default async function DepartmentMasterPage() {
   const session = await requireAdminSession();
-  let lookup: Awaited<ReturnType<typeof listMasterLookupData>> | null = null;
+  let orgData: Awaited<ReturnType<typeof listOrgTreeData>> | null = null;
   let errorMessage: string | null = null;
 
   try {
-    lookup = await listMasterLookupData();
+    orgData = await listOrgTreeData();
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "잠시 후 다시 시도해 주세요.";
   }
@@ -20,14 +20,18 @@ export default async function DepartmentMasterPage() {
     <AppFrame
       currentPath="/admin/master/departments"
       session={session}
-      title="부서 기준정보"
-      description={lookup ? "로그인 권한과 실행 범위의 기준이 되는 조직 마스터를 관리합니다." : "부서 기준정보를 불러오지 못했습니다."}
+      title="조직 운영도구"
+      description={
+        orgData
+          ? "조직 구조, 사용자, 권한을 하나의 조직도 기반 운영 도구에서 실시간으로 관리합니다."
+          : "조직 운영도구를 불러오지 못했습니다."
+      }
     >
-      {lookup ? (
-        <DepartmentMasterClient departments={lookup.departments} users={lookup.users} />
+      {orgData ? (
+        <OrgAdminClient initialData={orgData} />
       ) : (
         <Card className="space-y-3">
-          <h2 className="text-lg font-semibold text-ink-950">부서 기준정보를 열 수 없습니다</h2>
+          <h2 className="text-lg font-semibold text-ink-950">조직 운영도구를 열 수 없습니다</h2>
           <p className="text-sm text-danger-700">{errorMessage}</p>
         </Card>
       )}
