@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-ink-950: #121826;
+  --color-ink-900: #172033;
+  --color-ink-700: #45556f;
+  --color-ink-500: #6a7a95;
+  --color-ink-300: #c7d0df;
+  --color-ink-200: #dde4ee;
+  --color-ink-100: #edf2f7;
+  --color-surface: #f6f8fc;
+  --color-panel: #ffffff;
+  --color-panel-soft: rgba(255, 255, 255, 0.78);
+  --color-brand-600: #175cd3;
+  --color-brand-500: #2d74eb;
+  --color-brand-50: #e8f0ff;
+  --color-danger-700: #c21818;
+  --color-danger-600: #dc2626;
+  --color-danger-50: #fff1f1;
+  --color-warning-700: #b45309;
+  --color-warning-100: #fff2d8;
+  --color-success-700: #067647;
+  --color-success-100: #dcfae6;
+}
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html {
+    @apply h-full;
+  }
+
+  body {
+    @apply min-h-full bg-surface font-sans text-ink-950 antialiased;
+    background-image:
+      radial-gradient(circle at top, rgba(23, 92, 211, 0.12), transparent 32%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.88), transparent 40%);
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .app-container {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .panel {
+    @apply rounded-3xl border border-ink-200/70 bg-panel shadow-[0_18px_50px_rgba(18,24,38,0.08)];
+  }
+
+  .panel-soft {
+    @apply rounded-3xl border border-white/60 bg-panel-soft shadow-[0_18px_50px_rgba(18,24,38,0.06)] backdrop-blur;
+  }
+
+  .field {
+    @apply flex h-12 w-full rounded-2xl border border-ink-200 bg-white px-4 text-sm text-ink-950 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50;
+  }
+
+  .textarea-field {
+    @apply flex h-auto min-h-28 w-full rounded-2xl border border-ink-200 bg-white px-4 py-3 text-sm text-ink-950 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-50;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold tracking-tight text-ink-950;
+  }
+}
