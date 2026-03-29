@@ -2198,6 +2198,36 @@ export async function resumeDirectiveProgressAsSession(session: AppSession, inpu
   await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
 }
 
+export async function resumeDirectiveProgressAsSession(session: AppSession, input: WorkflowDecisionInput) {
+  const detail = await getDirectiveDetailForSession(session, input.directiveId);
+  const targetDepartment =
+    detail.departments.find((department) => department.departmentId === input.departmentId) ??
+    detail.departments.find((department) => department.departmentId === detail.workflow.currentDepartmentId) ??
+    null;
+
+  if (!targetDepartment || !targetDepartment.canResumeProgress || !canResumeDirectiveProgress(session, targetDepartment)) {
+    throw new ApiError(400, "반려된 부서만 재진행으로 전환할 수 있습니다.", null, "DIRECTIVE_RESUME_DENIED");
+  }
+
+  const client = createSupabaseServerClient();
+  await updateDirectiveDepartmentStatus(client, input.directiveId, "IN_PROGRESS", {
+    departmentId: targetDepartment.departmentId,
+  });
+  const directiveStatus = await syncDirectiveAggregateStatus(client, input.directiveId);
+  await recordHistory(client, {
+    action: "DIRECTIVE_RESUMED",
+    actorId: session.userId,
+    entityId: input.directiveId,
+    entityType: "directive",
+    metadata: {
+      departmentId: targetDepartment.departmentId,
+      departmentName: targetDepartment.departmentName,
+      directiveStatus,
+      reason: input.reason,
+    },
+  });
+}
+
 async function loadDirectiveItemsForDashboard(client: SupabaseClient, session: AppSession) {
   const accessibleIds = await getAccessibleDirectiveIds(client, session);
 
