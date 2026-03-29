@@ -159,7 +159,9 @@ export interface DirectiveListItem extends DirectiveActivitySummary {
   isUrgent: boolean;
   ownerDepartmentCode: string | null;
   ownerDepartmentName: string | null;
+  ownerUserId: string | null;
   ownerUserName: string | null;
+  ownerUserTitle: string | null;
   status: DirectiveStatus;
   supportDepartmentCount: number;
   targetDepartmentCount: number;
@@ -270,6 +272,7 @@ export interface DirectiveDetail extends DirectiveActivitySummary {
 }
 
 export interface DashboardKpi {
+  description?: string;
   label: string;
   tone: "danger" | "default" | "muted" | "success" | "warning";
   value: number;
@@ -277,11 +280,14 @@ export interface DashboardKpi {
 
 export interface DashboardRecentUpdate {
   actionSummary: string;
+  departmentName: string | null;
   directiveId: string;
   directiveNo: string;
   directiveTitle: string;
   happenedAt: string;
   logType: DirectiveLogType;
+  nextAction: string | null;
+  riskNote: string | null;
   userName: string | null;
 }
 
@@ -290,13 +296,46 @@ export interface DashboardData {
   kpis: DashboardKpi[];
   recentUpdates: DashboardRecentUpdate[];
   urgentItems: DirectiveListItem[];
+  waitingApprovalCount: number;
   waitingApprovalItems: DirectiveListItem[];
 }
 
+export interface DepartmentBoardSummary {
+  actionRequiredCount: number;
+  completedCount: number;
+  completionRate: number;
+  delayedCount: number;
+  inProgressCount: number;
+  lastActivityAt: string | null;
+  missingEvidenceCount: number;
+  totalCount: number;
+  urgentCount: number;
+  waitingApprovalCount: number;
+}
+
+export interface DepartmentOwnerInsight {
+  completedCount: number;
+  delayedCount: number;
+  inProgressCount: number;
+  lastActivityAt: string | null;
+  missingEvidenceCount: number;
+  name: string;
+  ownerUserId: string | null;
+  qualityLabel: string;
+  qualityTone: "danger" | "default" | "muted" | "success" | "warning";
+  title: string | null;
+  totalCount: number;
+  urgentCount: number;
+  waitingApprovalCount: number;
+}
+
 export interface DepartmentBoardData {
+  delayedItems: DirectiveListItem[];
+  departmentSummary: DepartmentBoardSummary;
   dueSoonItems: DirectiveListItem[];
   kpis: DashboardKpi[];
   missingEvidenceItems: DirectiveListItem[];
+  ownerInsights: DepartmentOwnerInsight[];
   recentUpdates: DashboardRecentUpdate[];
   urgentItems: DirectiveListItem[];
   waitingApprovalItems: DirectiveListItem[];

@@ -2,6 +2,7 @@ export * from "./app/app-frame";
 export * from "./app/logout-button";
 export * from "./auth/login-form";
 export * from "./dashboard/kpi-card";
+export * from "./dashboard/section-card";
 export * from "./master/department-master-client";
 export * from "./master/user-master-client";
 export * from "./directives/attachment-list";

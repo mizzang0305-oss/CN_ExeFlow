@@ -21,6 +21,8 @@ import type {
   DashboardRecentUpdate,
   DeleteDirectiveLogInput,
   DepartmentBoardData,
+  DepartmentBoardSummary,
+  DepartmentOwnerInsight,
   DepartmentRecord,
   DirectiveActivitySummary,
   DirectiveDepartmentAssignmentRole,
@@ -103,6 +105,28 @@ function createStatusCountMap(): Record<DirectiveStatus, number> {
     NEW: 0,
     REJECTED: 0,
   };
+}
+
+function calculateRate(numerator: number, denominator: number) {
+  if (denominator <= 0) {
+    return 0;
+  }
+
+  return Math.round((numerator / denominator) * 100);
+}
+
+function getLatestTimestamp(values: Array<string | null | undefined>) {
+  return values.reduce<string | null>((latest, value) => {
+    if (!value) {
+      return latest;
+    }
+
+    if (!latest) {
+      return value;
+    }
+
+    return new Date(value).getTime() > new Date(latest).getTime() ? value : latest;
+  }, null);
 }
 
 function normalizeAssignmentRole(
@@ -691,7 +715,9 @@ function mapDirectiveSummary(options: {
     isUrgent: options.directive.is_urgent,
     ownerDepartmentCode: ownerDepartment?.code ?? null,
     ownerDepartmentName: ownerDepartment?.name ?? null,
+    ownerUserId: options.directive.owner_user_id,
     ownerUserName: buildUserDisplayName(ownerUser),
+    ownerUserTitle: ownerUser?.title ?? null,
     status: options.directive.status,
     supportDepartmentCount: Math.max(0, targetDepartmentCount - 1),
     targetDepartmentCount,
@@ -1122,7 +1148,10 @@ async function buildRecentUpdates(
   }
 
   const logs = (data ?? []) as DirectiveLogRow[];
-  const usersMap = await loadUsersMap(client, logs.map((log) => log.user_id));
+  const [departmentsMap, usersMap] = await Promise.all([
+    loadDepartmentsMap(client, logs.map((log) => log.department_id)),
+    loadUsersMap(client, logs.map((log) => log.user_id)),
+  ]);
 
   return logs
     .map<DashboardRecentUpdate | null>((log) => {
@@ -1135,11 +1164,14 @@ async function buildRecentUpdates(
       const meta = decodeLogMeta(log.detail, log.updated_at ?? log.created_at);
       return {
         actionSummary: log.action_summary,
+        departmentName: departmentsMap.get(log.department_id)?.name ?? null,
         directiveId: directive.id,
         directiveNo: directive.directiveNo,
         directiveTitle: directive.title,
         happenedAt: meta.happenedAt,
         logType: meta.logType,
+        nextAction: meta.nextAction,
+        riskNote: meta.riskNote,
         userName: buildUserDisplayName(usersMap.get(log.user_id)),
       };
     })
@@ -1919,6 +1951,162 @@ async function loadDirectiveItemsForDashboard(client: SupabaseClient, session: A
   };
 }
 
+function buildDepartmentBoardSummary(
+  items: DirectiveListItem[],
+  missingEvidenceItems: DirectiveListItem[],
+): DepartmentBoardSummary {
+  const completedCount = items.filter((item) => item.status === "COMPLETED").length;
+  const inProgressCount = items.filter((item) => item.status === "IN_PROGRESS").length;
+  const delayedCount = items.filter((item) => item.isDelayed).length;
+  const waitingApprovalCount = items.filter((item) => item.status === "COMPLETION_REQUESTED").length;
+  const urgentCount = items.filter((item) => item.isUrgent && item.status !== "COMPLETED").length;
+  const uniqueActionRequiredIds = new Set(
+    items
+      .filter(
+        (item) =>
+          item.isDelayed ||
+          item.status === "COMPLETION_REQUESTED" ||
+          (item.status !== "COMPLETED" && item.isUrgent) ||
+          (item.status !== "COMPLETED" && item.attachmentCount === 0),
+      )
+      .map((item) => item.id),
+  );
+
+  return {
+    actionRequiredCount: uniqueActionRequiredIds.size,
+    completedCount,
+    completionRate: calculateRate(completedCount, items.length),
+    delayedCount,
+    inProgressCount,
+    lastActivityAt: getLatestTimestamp(items.map((item) => item.lastActivityAt)),
+    missingEvidenceCount: missingEvidenceItems.length,
+    totalCount: items.length,
+    urgentCount,
+    waitingApprovalCount,
+  };
+}
+
+function buildDepartmentOwnerInsights(items: DirectiveListItem[]): DepartmentOwnerInsight[] {
+  const groupedOwners = new Map<
+    string,
+    {
+      completedCount: number;
+      delayedCount: number;
+      inProgressCount: number;
+      lastActivityAt: string | null;
+      missingEvidenceCount: number;
+      name: string;
+      ownerUserId: string | null;
+      title: string | null;
+      totalCount: number;
+      urgentCount: number;
+      waitingApprovalCount: number;
+    }
+  >();
+
+  for (const item of items) {
+    const groupKey = item.ownerUserId ?? `unassigned:${item.ownerDepartmentName ?? "none"}`;
+    const current = groupedOwners.get(groupKey) ?? {
+      completedCount: 0,
+      delayedCount: 0,
+      inProgressCount: 0,
+      lastActivityAt: null,
+      missingEvidenceCount: 0,
+      name: item.ownerUserName ?? item.ownerDepartmentName ?? "담당자 미지정",
+      ownerUserId: item.ownerUserId,
+      title: item.ownerUserTitle,
+      totalCount: 0,
+      urgentCount: 0,
+      waitingApprovalCount: 0,
+    };
+
+    current.totalCount += 1;
+    current.lastActivityAt = getLatestTimestamp([current.lastActivityAt, item.lastActivityAt]);
+
+    if (item.status === "COMPLETED") {
+      current.completedCount += 1;
+    }
+
+    if (item.status === "IN_PROGRESS") {
+      current.inProgressCount += 1;
+    }
+
+    if (item.status === "COMPLETION_REQUESTED") {
+      current.waitingApprovalCount += 1;
+    }
+
+    if (item.isDelayed) {
+      current.delayedCount += 1;
+    }
+
+    if (item.status !== "COMPLETED" && item.attachmentCount === 0) {
+      current.missingEvidenceCount += 1;
+    }
+
+    if (item.status !== "COMPLETED" && item.isUrgent) {
+      current.urgentCount += 1;
+    }
+
+    groupedOwners.set(groupKey, current);
+  }
+
+  return Array.from(groupedOwners.values())
+    .map<DepartmentOwnerInsight>((owner) => {
+      const atRiskCount = owner.delayedCount + owner.missingEvidenceCount + owner.urgentCount;
+      const qualityTone =
+        atRiskCount > 0 ? "danger" : owner.waitingApprovalCount > 0 ? "warning" : owner.completedCount > 0 ? "success" : "default";
+      const qualityLabel =
+        atRiskCount > 0
+          ? "즉시 점검"
+          : owner.waitingApprovalCount > 0
+            ? "보강 필요"
+            : owner.completedCount > 0
+              ? "안정 진행"
+              : "진행 확인";
+
+      return {
+        completedCount: owner.completedCount,
+        delayedCount: owner.delayedCount,
+        inProgressCount: owner.inProgressCount,
+        lastActivityAt: owner.lastActivityAt,
+        missingEvidenceCount: owner.missingEvidenceCount,
+        name: owner.name,
+        ownerUserId: owner.ownerUserId,
+        qualityLabel,
+        qualityTone,
+        title: owner.title,
+        totalCount: owner.totalCount,
+        urgentCount: owner.urgentCount,
+        waitingApprovalCount: owner.waitingApprovalCount,
+      };
+    })
+    .sort((left, right) => {
+      const leftPriority =
+        left.delayedCount * 5 +
+        left.missingEvidenceCount * 4 +
+        left.urgentCount * 3 +
+        left.waitingApprovalCount * 2 +
+        left.inProgressCount;
+      const rightPriority =
+        right.delayedCount * 5 +
+        right.missingEvidenceCount * 4 +
+        right.urgentCount * 3 +
+        right.waitingApprovalCount * 2 +
+        right.inProgressCount;
+
+      if (leftPriority !== rightPriority) {
+        return rightPriority - leftPriority;
+      }
+
+      if (left.totalCount !== right.totalCount) {
+        return right.totalCount - left.totalCount;
+      }
+
+      return left.name.localeCompare(right.name, "ko");
+    })
+    .slice(0, 6);
+}
+
 export async function getDashboardData(session: AppSession): Promise<DashboardData> {
   if (!canViewDashboard(session.role) && !isAdminRole(session.role)) {
     throw new ApiError(403, "대시보드를 볼 권한이 없습니다.", null, "DASHBOARD_ACCESS_DENIED");
@@ -1931,14 +2119,35 @@ export async function getDashboardData(session: AppSession): Promise<DashboardDa
   return {
     delayedItems: items.filter((item) => item.isDelayed).slice(0, 6),
     kpis: [
-      { label: "전체 건수", tone: "default", value: items.length },
-      { label: "진행 중", tone: "muted", value: items.filter((item) => item.status === "IN_PROGRESS").length },
-      { label: "지연", tone: "warning", value: items.filter((item) => item.isDelayed).length },
-      { label: "완료", tone: "success", value: items.filter((item) => item.status === "COMPLETED").length },
-      { label: "긴급", tone: "danger", value: items.filter((item) => item.isUrgent).length },
+      { description: "대표가 오늘 확인할 전사 지시 모수", label: "전체 건수", tone: "default", value: items.length },
+      {
+        description: "지금 실행 중인 지시 흐름",
+        label: "진행 중",
+        tone: "muted",
+        value: items.filter((item) => item.status === "IN_PROGRESS").length,
+      },
+      {
+        description: "병목으로 바로 이어지는 지연 건",
+        label: "지연",
+        tone: "warning",
+        value: items.filter((item) => item.isDelayed).length,
+      },
+      {
+        description: "승인까지 끝난 완료 건",
+        label: "완료",
+        tone: "success",
+        value: items.filter((item) => item.status === "COMPLETED").length,
+      },
+      {
+        description: "대표 판단이 먼저 필요한 긴급 건",
+        label: "긴급",
+        tone: "danger",
+        value: items.filter((item) => item.isUrgent).length,
+      },
     ],
     recentUpdates,
     urgentItems: items.filter((item) => item.isUrgent && item.status !== "COMPLETED").slice(0, 6),
+    waitingApprovalCount: items.filter((item) => item.status === "COMPLETION_REQUESTED").length,
     waitingApprovalItems: items.filter((item) => item.status === "COMPLETION_REQUESTED").slice(0, 6),
   };
 }
@@ -1953,11 +2162,15 @@ export async function getDepartmentBoardData(session: AppSession): Promise<Depar
   const recentUpdates = await buildRecentUpdates(client, items, accessibleIds, 6);
   const now = Date.now();
   const sevenDaysLater = now + 7 * 24 * 60 * 60 * 1000;
-  const missingEvidenceItems = items
-    .filter((item) => item.status !== "COMPLETED" && item.attachmentCount === 0)
-    .slice(0, 6);
+  const missingEvidenceAll = items.filter((item) => item.status !== "COMPLETED" && item.attachmentCount === 0);
+  const delayedItems = items.filter((item) => item.isDelayed).slice(0, 6);
+  const missingEvidenceItems = missingEvidenceAll.slice(0, 6);
+  const departmentSummary = buildDepartmentBoardSummary(items, missingEvidenceAll);
+  const ownerInsights = buildDepartmentOwnerInsights(items);
 
   return {
+    delayedItems,
+    departmentSummary,
     dueSoonItems: items
       .filter((item) => item.dueDate)
       .filter((item) => {
@@ -1966,13 +2179,34 @@ export async function getDepartmentBoardData(session: AppSession): Promise<Depar
       })
       .slice(0, 6),
     kpis: [
-      { label: "배정 건수", tone: "default", value: items.length },
-      { label: "진행 중", tone: "muted", value: items.filter((item) => item.status === "IN_PROGRESS").length },
-      { label: "승인 대기", tone: "default", value: items.filter((item) => item.status === "COMPLETION_REQUESTED").length },
-      { label: "지연", tone: "warning", value: items.filter((item) => item.isDelayed).length },
-      { label: "증빙 필요", tone: "danger", value: missingEvidenceItems.length },
+      { description: "우리 부서가 맡은 전체 지시 건", label: "배정 건수", tone: "default", value: items.length },
+      {
+        description: "담당자가 현재 실행 중인 건",
+        label: "진행 중",
+        tone: "muted",
+        value: items.filter((item) => item.status === "IN_PROGRESS").length,
+      },
+      {
+        description: "완료 요청 후 승인만 남은 건",
+        label: "승인 대기",
+        tone: "default",
+        value: items.filter((item) => item.status === "COMPLETION_REQUESTED").length,
+      },
+      {
+        description: "즉시 개입이 필요한 지연 건",
+        label: "지연",
+        tone: "warning",
+        value: items.filter((item) => item.isDelayed).length,
+      },
+      {
+        description: "증빙 보강이 필요한 건",
+        label: "증빙 필요",
+        tone: "danger",
+        value: missingEvidenceAll.length,
+      },
     ],
     missingEvidenceItems,
+    ownerInsights,
     recentUpdates,
     urgentItems: items.filter((item) => item.isUrgent && item.status !== "COMPLETED").slice(0, 6),
     waitingApprovalItems: items.filter((item) => item.status === "COMPLETION_REQUESTED").slice(0, 6),

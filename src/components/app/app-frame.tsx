@@ -49,19 +49,19 @@ export function AppFrame({ children, currentPath, description, session, title }:
   const navigationItems = getNavigationItems(session);
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(241,245,249,0.96),rgba(248,250,252,1))] pb-12">
-      <header className="border-b border-brand-100 bg-white/92 backdrop-blur">
+    <div className="min-h-screen bg-[linear-gradient(180deg,rgba(243,246,251,0.96),rgba(248,250,252,1))] pb-12">
+      <header className="sticky top-0 z-30 border-b border-brand-100/70 bg-white/88 backdrop-blur-xl">
         <div className="app-container flex flex-col gap-5 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
             <Link
               href={isExecutiveRole(session.role) ? "/dashboard" : currentPath}
               className="inline-flex items-center gap-3"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-700 text-sm font-bold text-white shadow-[0_12px_24px_rgba(15,51,117,0.24)]">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-950 text-sm font-bold text-white shadow-[0_16px_28px_rgba(12,31,71,0.24)]">
                 CN
               </span>
               <div>
-                <p className="text-sm font-semibold tracking-[0.16em] text-brand-700">CN FOOD</p>
+                <p className="text-sm font-semibold tracking-[0.16em] text-brand-900">CN FOOD</p>
                 <p className="text-xs font-medium text-ink-500">CN EXEFLOW</p>
               </div>
             </Link>
@@ -73,7 +73,7 @@ export function AppFrame({ children, currentPath, description, session, title }:
           </div>
 
           <div className="flex flex-col gap-3 lg:items-end">
-            <nav className="flex flex-wrap gap-2">
+            <nav className="flex flex-wrap gap-2 rounded-[26px] border border-ink-200/80 bg-white/90 p-1.5 shadow-[0_12px_30px_rgba(18,24,38,0.06)]">
               {navigationItems.map((item) => {
                 const isActive = currentPath === item.href || currentPath.startsWith(`${item.href}/`);
 
@@ -83,8 +83,8 @@ export function AppFrame({ children, currentPath, description, session, title }:
                     href={item.href}
                     className={
                       isActive
-                        ? "rounded-full bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_rgba(15,51,117,0.18)]"
-                        : "rounded-full bg-white px-4 py-2 text-sm font-medium text-ink-700 ring-1 ring-ink-200 transition hover:bg-brand-50"
+                        ? "rounded-full bg-brand-950 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_16px_30px_rgba(12,31,71,0.24)]"
+                        : "rounded-full px-4 py-2.5 text-sm font-medium text-ink-700 transition hover:bg-brand-50 hover:text-brand-900"
                     }
                   >
                     {item.label}
@@ -93,8 +93,8 @@ export function AppFrame({ children, currentPath, description, session, title }:
               })}
             </nav>
 
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-brand-50 px-4 py-3 text-right">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="rounded-2xl border border-brand-100 bg-brand-50/85 px-4 py-3 text-right shadow-[0_8px_20px_rgba(23,92,211,0.08)]">
                 <p className="text-sm font-semibold text-ink-950">{session.displayName}</p>
                 <p className="text-xs text-ink-500">
                   {session.departmentName ?? "미배정"} · {roleLabelMap[session.role]}
