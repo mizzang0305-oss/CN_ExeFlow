@@ -1,12 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
 export function LogoutButton() {
-  const router = useRouter();
   const [isPending, setIsPending] = useState(false);
 
   async function handleLogout() {
@@ -17,8 +15,7 @@ export function LogoutButton() {
         method: "POST",
       });
 
-      router.push("/login");
-      router.refresh();
+      window.location.assign("/login");
     } finally {
       setIsPending(false);
     }
@@ -26,7 +23,7 @@ export function LogoutButton() {
 
   return (
     <Button variant="ghost" size="sm" onClick={handleLogout} disabled={isPending}>
-      {isPending ? "종료 중" : "로그아웃"}
+      {isPending ? "정리 중..." : "로그아웃"}
     </Button>
   );
 }

@@ -1,6 +1,6 @@
 import { getCurrentSession } from "@/features/auth";
 import { getDashboardData } from "@/features/dashboard";
-import { handleApiError } from "@/lib/api";
+import { createApiErrorResponse, createApiSuccessResponse, handleApiError } from "@/lib/api";
 
 export const runtime = "nodejs";
 
@@ -9,11 +9,14 @@ export async function GET() {
     const session = await getCurrentSession();
 
     if (!session) {
-      return Response.json({ error: "로그인이 필요합니다." }, { status: 401 });
+      return createApiErrorResponse(401, {
+        code: "AUTH_REQUIRED",
+        message: "로그인이 필요합니다.",
+      });
     }
 
     const data = await getDashboardData(session);
-    return Response.json({ data });
+    return createApiSuccessResponse(data);
   } catch (error) {
     return handleApiError(error);
   }

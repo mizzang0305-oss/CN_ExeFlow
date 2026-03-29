@@ -1,12 +1,10 @@
 import { clearAppSession } from "@/features/auth";
-import { handleApiError } from "@/lib/api";
-
-export const runtime = "nodejs";
+import { createApiSuccessResponse, handleApiError } from "@/lib/api";
 
 export async function POST() {
   try {
     await clearAppSession();
-    return Response.json({ success: true });
+    return createApiSuccessResponse({ loggedOut: true });
   } catch (error) {
     return handleApiError(error);
   }

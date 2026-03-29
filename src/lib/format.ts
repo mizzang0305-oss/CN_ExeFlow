@@ -10,6 +10,11 @@ const dateTimeFormatter = new Intl.DateTimeFormat("ko-KR", {
   minute: "2-digit",
 });
 
+const weekFormatter = new Intl.DateTimeFormat("ko-KR", {
+  month: "2-digit",
+  day: "2-digit",
+});
+
 export function formatDateLabel(value: string | null | undefined) {
   if (!value) {
     return "미정";
@@ -50,4 +55,16 @@ export function formatRelativeUpdate(value: string | null | undefined) {
 
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays}일 전`;
+}
+
+export function formatPercentLabel(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) {
+    return "-";
+  }
+
+  return `${Math.round(value)}%`;
+}
+
+export function formatWeekRangeLabel(start: string, end: string) {
+  return `${weekFormatter.format(new Date(start))} - ${weekFormatter.format(new Date(end))}`;
 }

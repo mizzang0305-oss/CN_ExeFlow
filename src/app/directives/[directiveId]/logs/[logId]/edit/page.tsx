@@ -11,9 +11,7 @@ type EditDirectiveLogPageProps = {
   }>;
 };
 
-export default async function EditDirectiveLogPage({
-  params,
-}: EditDirectiveLogPageProps) {
+export default async function EditDirectiveLogPage({ params }: EditDirectiveLogPageProps) {
   const session = await requireCurrentSession();
   const { directiveId, logId } = await params;
 
@@ -23,7 +21,7 @@ export default async function EditDirectiveLogPage({
   try {
     directive = await getDirectiveDetailForSession(session, directiveId);
 
-    if (!directive.canManageLogs) {
+    if (!directive.workflow.canManageLogs) {
       throw new Error("이 지시사항의 행동 로그를 수정할 권한이 없습니다.");
     }
 
@@ -33,8 +31,7 @@ export default async function EditDirectiveLogPage({
       throw new Error("수정할 행동 로그를 찾을 수 없습니다.");
     }
   } catch (error) {
-    errorMessage =
-      error instanceof Error ? error.message : "행동 로그 수정 화면을 열 수 없습니다.";
+    errorMessage = error instanceof Error ? error.message : "행동 로그 수정 화면을 불러오지 못했습니다.";
   }
 
   const targetLog = directive?.logs.find((log) => log.id === logId) ?? null;
@@ -54,7 +51,7 @@ export default async function EditDirectiveLogPage({
           </p>
         </Card>
       ) : (
-        <LogForm directiveId={directive.id} initialLog={targetLog} mode="edit" session={session} />
+        <LogForm directiveId={directive.id} initialLog={targetLog} mode="edit" />
       )}
     </AppFrame>
   );

@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { directivePriorityLabels } from "@/features/directives/constants";
 import type { DirectiveListItem } from "@/features/directives/types";
 import { formatDateLabel, formatRelativeUpdate } from "@/lib/format";
 
@@ -26,28 +25,31 @@ export function DirectiveCard({ directive }: { directive: DirectiveListItem }) {
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-lg font-semibold tracking-tight text-ink-950">
-              {directive.title}
-            </h2>
+            <h2 className="text-lg font-semibold tracking-tight text-ink-950">{directive.title}</h2>
             <p className="text-sm text-ink-700">
               {directive.ownerDepartmentName ?? "미지정 부서"}
+              {directive.ownerUserName ? ` · ${directive.ownerUserName}` : ""}
             </p>
           </div>
 
-          <div className="grid gap-2 text-sm text-ink-700 sm:grid-cols-3">
+          <div className="grid gap-3 text-sm text-ink-700 sm:grid-cols-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">마감일</p>
-              <p className={directive.isDelayed ? "mt-1 font-semibold text-warning-700" : "mt-1"}>
+              <p className={directive.isDelayed ? "mt-1 font-semibold text-danger-700" : "mt-1"}>
                 {formatDateLabel(directive.dueDate)}
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">우선순위</p>
-              <p className="mt-1">{directivePriorityLabels[directive.priority]}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">최근 업데이트</p>
+              <p className="mt-1">{formatRelativeUpdate(directive.lastActivityAt)}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">최근 상태</p>
-              <p className="mt-1">{formatRelativeUpdate(directive.updatedAt)}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">실행 로그</p>
+              <p className="mt-1">{directive.logCount}건</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">증빙</p>
+              <p className="mt-1">{directive.attachmentCount}건</p>
             </div>
           </div>
         </div>

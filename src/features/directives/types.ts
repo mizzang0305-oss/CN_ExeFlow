@@ -1,37 +1,37 @@
 import type { JsonObject } from "@/types";
 
-import type {
-  directiveLogTypes,
-  directivePriorities,
-  directiveSourceTypes,
-  directiveStatuses,
-} from "./constants";
+import type { directiveLogTypes, directiveStatuses } from "./constants";
 
-export type DirectiveSourceType = (typeof directiveSourceTypes)[number];
-export type DirectivePriority = (typeof directivePriorities)[number];
 export type DirectiveStatus = (typeof directiveStatuses)[number];
 export type DirectiveLogType = (typeof directiveLogTypes)[number];
 
 export interface DirectiveRow {
-  close_reason: string | null;
-  closed_at: string | null;
   content: string;
   created_at: string;
   created_by: string;
   directive_no: string;
   due_date: string | null;
   id: string;
-  instructed_at: string;
   is_archived: boolean;
   is_urgent: boolean;
   owner_department_id: string | null;
   owner_user_id: string | null;
-  priority: DirectivePriority;
-  source_type: DirectiveSourceType;
   status: DirectiveStatus;
   title: string;
-  updated_at: string;
   urgent_level: number | null;
+}
+
+export interface DirectiveDepartmentRow {
+  assigned_at: string | null;
+  created_at: string;
+  department_closed_at: string | null;
+  department_due_date: string | null;
+  department_head_id: string | null;
+  department_id: string;
+  department_status: DirectiveStatus;
+  directive_id: string;
+  id: string;
+  updated_at: string | null;
 }
 
 export interface DirectiveLogRow {
@@ -43,13 +43,8 @@ export interface DirectiveLogRow {
   department_id: string;
   detail: string | null;
   directive_id: string;
-  happened_at: string;
   id: string;
   is_deleted: boolean;
-  log_type: string;
-  next_action: string | null;
-  risk_note: string | null;
-  task_id: string | null;
   updated_at: string | null;
   user_id: string;
 }
@@ -67,8 +62,25 @@ export interface DirectiveAttachmentRow {
   uploaded_by: string;
 }
 
+export interface WeeklyReportRow {
+  completed_count: number;
+  completion_rate: number | null;
+  created_at: string;
+  created_by: string | null;
+  delayed_count: number;
+  id: string;
+  in_progress_count: number;
+  new_count: number;
+  on_time_completion_rate: number | null;
+  report_json: JsonObject | null;
+  total_count: number;
+  week_end: string;
+  week_start: string;
+}
+
 export interface DepartmentRecord {
   code: string;
+  head_user_id: string | null;
   id: string;
   name: string;
 }
@@ -77,7 +89,9 @@ export interface UserRecord {
   department_id: string | null;
   id: string;
   name: string;
+  profile_name: string | null;
   role: string;
+  title: string | null;
 }
 
 export interface DirectiveListFilters {
@@ -89,29 +103,22 @@ export interface DirectiveListFilters {
 
 export interface CreateDirectiveInput {
   content: string;
-  createdBy: string;
   dueDate: string | null;
-  instructedAt: string;
   isUrgent: boolean;
-  ownerDepartmentId: string | null;
+  ownerDepartmentId: string;
   ownerUserId: string | null;
-  priority: DirectivePriority;
-  sourceType: DirectiveSourceType;
   title: string;
   urgentLevel: number | null;
 }
 
 export interface CreateDirectiveLogInput {
   actionSummary: string;
-  departmentId: string;
   detail: string | null;
   directiveId: string;
   happenedAt: string;
   logType: DirectiveLogType;
   nextAction: string | null;
   riskNote: string | null;
-  taskId: string | null;
-  userId: string;
 }
 
 export interface UpdateDirectiveLogInput extends CreateDirectiveLogInput {
@@ -119,13 +126,23 @@ export interface UpdateDirectiveLogInput extends CreateDirectiveLogInput {
 }
 
 export interface DeleteDirectiveLogInput {
-  deletedBy: string;
   directiveId: string;
   logId: string;
   reason: string | null;
 }
 
-export interface DirectiveListItem {
+export interface WorkflowDecisionInput {
+  directiveId: string;
+  reason: string | null;
+}
+
+export interface DirectiveActivitySummary {
+  attachmentCount: number;
+  lastActivityAt: string;
+  logCount: number;
+}
+
+export interface DirectiveListItem extends DirectiveActivitySummary {
   directiveNo: string;
   dueDate: string | null;
   id: string;
@@ -133,11 +150,18 @@ export interface DirectiveListItem {
   isUrgent: boolean;
   ownerDepartmentCode: string | null;
   ownerDepartmentName: string | null;
-  priority: DirectivePriority;
+  ownerUserName: string | null;
   status: DirectiveStatus;
   title: string;
-  updatedAt: string;
   urgentLevel: number | null;
+}
+
+export interface DirectiveLogMeta {
+  detail: string | null;
+  happenedAt: string;
+  logType: DirectiveLogType;
+  nextAction: string | null;
+  riskNote: string | null;
 }
 
 export interface DirectiveLogItem {
@@ -154,10 +178,9 @@ export interface DirectiveLogItem {
   happenedAt: string;
   id: string;
   isDeleted: boolean;
-  logType: string;
+  logType: DirectiveLogType;
   nextAction: string | null;
   riskNote: string | null;
-  taskId: string | null;
   updatedAt: string | null;
   userId: string;
   userName: string | null;
@@ -177,11 +200,17 @@ export interface DirectiveAttachmentItem {
   uploadedByName: string | null;
 }
 
-export interface DirectiveDetail {
-  attachments: DirectiveAttachmentItem[];
+export interface DirectiveWorkflowFlags {
+  canApprove: boolean;
+  canCreateDirective: boolean;
   canManageLogs: boolean;
-  closeReason: string | null;
-  closedAt: string | null;
+  canReject: boolean;
+  canRequestCompletion: boolean;
+  isReadOnly: boolean;
+}
+
+export interface DirectiveDetail extends DirectiveActivitySummary {
+  attachments: DirectiveAttachmentItem[];
   content: string;
   createdAt: string;
   createdBy: string;
@@ -189,7 +218,6 @@ export interface DirectiveDetail {
   directiveNo: string;
   dueDate: string | null;
   id: string;
-  instructedAt: string;
   isArchived: boolean;
   isDelayed: boolean;
   isUrgent: boolean;
@@ -198,12 +226,10 @@ export interface DirectiveDetail {
   ownerDepartmentName: string | null;
   ownerUserId: string | null;
   ownerUserName: string | null;
-  priority: DirectivePriority;
-  sourceType: DirectiveSourceType;
   status: DirectiveStatus;
   title: string;
-  updatedAt: string;
   urgentLevel: number | null;
+  workflow: DirectiveWorkflowFlags;
 }
 
 export interface DashboardKpi {
@@ -218,7 +244,7 @@ export interface DashboardRecentUpdate {
   directiveNo: string;
   directiveTitle: string;
   happenedAt: string;
-  logType: string;
+  logType: DirectiveLogType;
   userName: string | null;
 }
 
@@ -230,8 +256,35 @@ export interface DashboardData {
   waitingApprovalItems: DirectiveListItem[];
 }
 
-export interface DirectiveDetailApiResponse {
-  data: DirectiveDetail;
+export interface DepartmentBoardData {
+  dueSoonItems: DirectiveListItem[];
+  kpis: DashboardKpi[];
+  missingEvidenceItems: DirectiveListItem[];
+  recentUpdates: DashboardRecentUpdate[];
+  urgentItems: DirectiveListItem[];
+  waitingApprovalItems: DirectiveListItem[];
+}
+
+export interface WeeklyReportSummary {
+  completionRate: number | null;
+  completedCount: number;
+  createdAt: string;
+  createdBy: string | null;
+  delayedCount: number;
+  id: string;
+  inProgressCount: number;
+  newCount: number;
+  onTimeCompletionRate: number | null;
+  totalCount: number;
+  weekEnd: string;
+  weekStart: string;
+}
+
+export interface ReportsOverview {
+  canGenerate: boolean;
+  latestReport: WeeklyReportSummary | null;
+  recentReports: WeeklyReportSummary[];
+  summaryCards: DashboardKpi[];
 }
 
 export interface PaginatedDirectives {

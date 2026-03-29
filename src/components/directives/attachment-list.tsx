@@ -23,9 +23,7 @@ export function AttachmentList({ attachments }: { attachments: DirectiveAttachme
             <Badge tone={attachment.fileType === "IMAGE" ? "default" : "muted"}>
               {attachment.fileType === "IMAGE" ? "사진" : "문서"}
             </Badge>
-            <span className="text-xs text-ink-500">
-              {formatDateTimeLabel(attachment.uploadedAt)}
-            </span>
+            <span className="text-xs text-ink-500">{formatDateTimeLabel(attachment.uploadedAt)}</span>
           </div>
 
           {attachment.isImage && attachment.downloadUrl ? (
@@ -44,7 +42,7 @@ export function AttachmentList({ attachments }: { attachments: DirectiveAttachme
           <div className="space-y-1">
             <p className="line-clamp-1 text-sm font-semibold text-ink-950">{attachment.fileName}</p>
             <p className="text-xs text-ink-500">
-              업로드: {attachment.uploadedByName ?? "사용자 미상"}
+              업로드: {attachment.uploadedByName ?? "사용자 미확인"}
             </p>
           </div>
 

@@ -8,10 +8,10 @@ import {
   DirectiveCard,
   EmptyState,
 } from "@/components";
-import { requireCurrentSession } from "@/features/auth";
+import { requireCurrentSession, isAdminRole, isExecutiveRole } from "@/features/auth";
 import {
-  directiveStatusLabels,
   directiveListQuerySchema,
+  directiveStatusLabels,
   directiveStatuses,
   listDirectivesForSession,
 } from "@/features/directives";
@@ -46,19 +46,19 @@ export default async function DirectivesPage({ searchParams }: DirectivesPagePro
   try {
     result = await listDirectivesForSession(session, filters);
   } catch (error) {
-    errorMessage =
-      error instanceof Error ? error.message : "지시사항을 불러오지 못했습니다.";
+    errorMessage = error instanceof Error ? error.message : "지시사항을 불러오지 못했습니다.";
   }
 
   const urgentCount = result?.items.filter((item) => item.isUrgent).length ?? 0;
   const delayedCount = result?.items.filter((item) => item.isDelayed).length ?? 0;
+  const canCreateDirective = isAdminRole(session.role) || isExecutiveRole(session.role);
 
   return (
     <AppFrame
       currentPath="/directives"
       session={session}
       title="지시사항"
-      description="긴급 건부터 보고, 바로 상세로 들어가 행동 로그를 남길 수 있도록 단순하게 구성했습니다."
+      description="긴급 건을 먼저 보고, 바로 상세로 들어가 행동 로그와 증빙을 남길 수 있도록 정리했습니다."
     >
       {errorMessage || !result ? (
         <Card className="space-y-3">
@@ -71,50 +71,65 @@ export default async function DirectivesPage({ searchParams }: DirectivesPagePro
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <Badge tone="default">{`총 ${result.pagination.total}건`}</Badge>
+                  <Badge tone="default">{`전체 ${result.pagination.total}건`}</Badge>
                   <Badge tone="danger">{`긴급 ${urgentCount}건`}</Badge>
                   <Badge tone="warning">{`지연 ${delayedCount}건`}</Badge>
                 </div>
                 <p className="text-sm text-ink-700">
                   {session.departmentName
-                    ? `${session.departmentName} 기준 흐름에 맞춰 정렬했습니다.`
-                    : "권한 범위에 맞는 지시사항만 표시합니다."}
+                    ? `${session.departmentName} 기준으로 접근 가능한 지시사항만 보여줍니다.`
+                    : "현재 권한 범위에 맞는 지시사항만 보여줍니다."}
                 </p>
               </div>
 
-              <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
-                <input
-                  type="search"
-                  name="search"
-                  defaultValue={filters.search}
-                  placeholder="관리번호나 제목으로 검색"
-                  className="field"
-                />
-                <select
-                  name="status"
-                  defaultValue={filters.status ?? ""}
-                  className="field appearance-none"
-                >
-                  <option value="">전체 상태</option>
-                  {directiveStatuses.map((status) => (
-                    <option key={status} value={status}>
-                      {directiveStatusLabels[status]}
-                    </option>
-                  ))}
-                </select>
-                <div className="sm:col-span-2">
-                  <Button type="submit" size="md">
-                    적용
-                  </Button>
-                </div>
-              </form>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+                  <input
+                    type="search"
+                    name="search"
+                    defaultValue={filters.search}
+                    placeholder="관리번호나 제목으로 검색"
+                    className="field"
+                  />
+                  <select
+                    name="status"
+                    defaultValue={filters.status ?? ""}
+                    className="field appearance-none"
+                  >
+                    <option value="">전체 상태</option>
+                    {directiveStatuses.map((status) => (
+                      <option key={status} value={status}>
+                        {directiveStatusLabels[status]}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="sm:col-span-2">
+                    <Button type="submit" size="md">
+                      적용
+                    </Button>
+                  </div>
+                </form>
+
+                {canCreateDirective ? (
+                  <Link href="/directives/new">
+                    <Button size="md">지시사항 등록</Button>
+                  </Link>
+                ) : null}
+              </div>
             </div>
           </Card>
 
           {result.items.length === 0 ? (
             <EmptyState
               title="표시할 지시사항이 없습니다"
-              description="검색 조건을 줄이거나, 부서에 배정된 신규 지시사항이 등록되면 여기에 나타납니다."
+              description="검색 조건을 줄이거나, 새 지시사항이 등록되면 이곳에 나타납니다."
+              action={
+                canCreateDirective ? (
+                  <Link href="/directives/new">
+                    <Button size="md">첫 지시사항 등록</Button>
+                  </Link>
+                ) : null
+              }
             />
           ) : (
             <div className="grid gap-4">

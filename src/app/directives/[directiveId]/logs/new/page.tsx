@@ -10,9 +10,7 @@ type NewDirectiveLogPageProps = {
   }>;
 };
 
-export default async function NewDirectiveLogPage({
-  params,
-}: NewDirectiveLogPageProps) {
+export default async function NewDirectiveLogPage({ params }: NewDirectiveLogPageProps) {
   const session = await requireCurrentSession();
   const { directiveId } = await params;
 
@@ -22,12 +20,11 @@ export default async function NewDirectiveLogPage({
   try {
     directive = await getDirectiveDetailForSession(session, directiveId);
 
-    if (!directive.canManageLogs) {
+    if (!directive.workflow.canManageLogs) {
       throw new Error("이 지시사항에 행동 로그를 등록할 권한이 없습니다.");
     }
   } catch (error) {
-    errorMessage =
-      error instanceof Error ? error.message : "행동 로그 화면을 열 수 없습니다.";
+    errorMessage = error instanceof Error ? error.message : "행동 로그 화면을 불러오지 못했습니다.";
   }
 
   return (
@@ -43,7 +40,7 @@ export default async function NewDirectiveLogPage({
           <p className="text-sm text-danger-700">{errorMessage}</p>
         </Card>
       ) : (
-        <LogForm directiveId={directive.id} mode="create" session={session} />
+        <LogForm directiveId={directive.id} mode="create" />
       )}
     </AppFrame>
   );

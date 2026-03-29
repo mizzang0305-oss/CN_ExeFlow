@@ -18,8 +18,7 @@ export function LogCard({
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="muted">
-              {directiveLogTypeLabels[log.logType as keyof typeof directiveLogTypeLabels] ??
-                log.logType}
+              {directiveLogTypeLabels[log.logType as keyof typeof directiveLogTypeLabels] ?? log.logType}
             </Badge>
             <span className="text-xs font-semibold text-ink-500">
               {formatDateTimeLabel(log.happenedAt)}
@@ -32,13 +31,21 @@ export function LogCard({
 
       <div className="space-y-3 text-sm leading-6 text-ink-700">
         {log.detail ? <p>{log.detail}</p> : null}
-        {log.nextAction ? <p><strong className="text-ink-950">다음 액션:</strong> {log.nextAction}</p> : null}
-        {log.riskNote ? <p><strong className="text-ink-950">리스크:</strong> {log.riskNote}</p> : null}
+        {log.nextAction ? (
+          <p>
+            <strong className="text-ink-950">다음 액션:</strong> {log.nextAction}
+          </p>
+        ) : null}
+        {log.riskNote ? (
+          <p>
+            <strong className="text-ink-950">리스크:</strong> {log.riskNote}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-ink-500">
-        <span>{log.departmentName ?? "부서 미상"}</span>
-        <span>{log.userName ?? "작성자 미상"}</span>
+        <span>{log.departmentName ?? "부서 미지정"}</span>
+        <span>{log.userName ?? "작성자 미확인"}</span>
         <span>{`증빙 ${log.attachmentCount}건`}</span>
       </div>
     </Card>
