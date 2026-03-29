@@ -8,16 +8,20 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup, FieldLabel, Textarea } from "@/components/ui/field";
 
 type WorkflowActionPanelProps = {
-  canApprove: boolean;
-  canReject: boolean;
-  canRequestCompletion: boolean;
+  canApprove?: boolean;
+  canReject?: boolean;
+  canRequestCompletion?: boolean;
+  departmentId: string;
+  departmentLabel: string;
   directiveId: string;
 };
 
 export function WorkflowActionPanel({
-  canApprove,
-  canReject,
-  canRequestCompletion,
+  canApprove = false,
+  canReject = false,
+  canRequestCompletion = false,
+  departmentId,
+  departmentLabel,
   directiveId,
 }: WorkflowActionPanelProps) {
   const [reason, setReason] = useState("");
@@ -34,7 +38,7 @@ export function WorkflowActionPanel({
 
     try {
       const response = await fetch(endpoint, {
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ departmentId, reason }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -54,14 +58,14 @@ export function WorkflowActionPanel({
   return (
     <div className="space-y-4 rounded-3xl border border-ink-200 bg-white p-5">
       <div>
-        <h3 className="text-base font-semibold text-ink-950">승인 / 반려 흐름</h3>
+        <h3 className="text-base font-semibold text-ink-950">{departmentLabel} 상태 처리</h3>
         <p className="mt-1 text-sm text-ink-700">
-          실행이 충분히 남겨졌다면 완료 요청을 올리고, 대표 또는 전략기획은 승인과 반려를 여기에서 처리합니다.
+          부서 단위로 완료 요청, 승인, 반려를 처리하고 상위 지시 상태는 자동으로 다시 집계합니다.
         </p>
       </div>
 
       <FieldGroup>
-        <FieldLabel label="사유 메모" hint="반려나 승인 메모가 있으면 남겨 주세요." />
+        <FieldLabel label="사유 메모" hint="반려 사유나 확인 메모가 있으면 남겨 주세요." />
         <Textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}

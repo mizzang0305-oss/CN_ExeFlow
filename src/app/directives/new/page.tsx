@@ -21,7 +21,7 @@ export default async function NewDirectivePage() {
       currentPath="/directives"
       session={session}
       title="지시사항 등록"
-      description="대표 지시를 전사 실행 플로우에 올리는 시작 화면입니다."
+      description="대표 지시 1건을 만들고, 주관 부서와 협조 부서를 한 번에 배정합니다."
     >
       {errorMessage || !lookup ? (
         <Card className="space-y-3">

@@ -72,6 +72,7 @@ export async function PATCH(request: Request, context: DirectiveLogRouteContext)
     const formData = await request.formData();
     const payload = {
       actionSummary: String(formData.get("actionSummary") ?? ""),
+      departmentId: String(formData.get("departmentId") ?? "") || null,
       detail: String(formData.get("detail") ?? "") || null,
       happenedAt: String(formData.get("happenedAt") ?? ""),
       logType: String(formData.get("logType") ?? ""),
