@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { DirectiveUrgentLevel } from "./types";
 
 import { directiveLogTypes, directiveStatuses, directiveUrgentLevels } from "./constants";
+import { validateDirectiveLogActionSummary } from "./validation";
 
 function normalizeDateTime(value: string) {
   const parsed = new Date(value);
@@ -20,6 +21,22 @@ function normalizeOptionalDateTime(value: string | null | undefined) {
   }
 
   return normalizeDateTime(value);
+}
+
+function normalizeBooleanQuery(value: unknown) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  if (value === true || value === "true" || value === "1" || value === 1) {
+    return true;
+  }
+
+  if (value === false || value === "false" || value === "0" || value === 0) {
+    return false;
+  }
+
+  return value;
 }
 
 const directiveUrgentLevelSchema = z.enum(directiveUrgentLevels);
@@ -58,6 +75,7 @@ export const directiveListQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(20),
   search: z.string().trim().optional(),
   status: z.enum(directiveStatuses).optional(),
+  urgent: z.preprocess(normalizeBooleanQuery, z.boolean().optional()),
 });
 
 export const createDirectiveSchema = z
@@ -91,16 +109,42 @@ export const createDirectiveSchema = z
 
 export const logPayloadSchema = z
   .object({
-    actionSummary: z.string().trim().min(1).max(160),
+    actionSummary: z.string().max(160),
     departmentId: z.string().uuid().nullable().optional(),
     detail: z.string().trim().max(3000).nullable().optional(),
-    happenedAt: z.string().trim().transform(normalizeDateTime),
-    logType: z.enum(directiveLogTypes),
+    happenedAt: z
+      .string()
+      .trim()
+      .min(1, "조치 일시를 입력해주세요.")
+      .transform((value, context) => {
+        try {
+          return normalizeDateTime(value);
+        } catch {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "조치 일시를 입력해주세요.",
+          });
+          return z.NEVER;
+        }
+      }),
+    logType: z.enum(directiveLogTypes, { message: "로그 유형을 선택해주세요." }),
     nextAction: z.string().trim().max(400).nullable().optional(),
     riskNote: z.string().trim().max(400).nullable().optional(),
   })
+  .superRefine((value, context) => {
+    const actionSummaryError = validateDirectiveLogActionSummary(value.actionSummary);
+
+    if (actionSummaryError) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: actionSummaryError,
+        path: ["actionSummary"],
+      });
+    }
+  })
   .transform((value) => ({
     ...value,
+    actionSummary: value.actionSummary.trim(),
     departmentId: value.departmentId ?? null,
     detail: value.detail ?? null,
     nextAction: value.nextAction ?? null,

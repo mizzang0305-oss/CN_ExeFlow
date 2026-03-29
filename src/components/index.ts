@@ -5,6 +5,7 @@ export * from "./dashboard/kpi-card";
 export * from "./master/department-master-client";
 export * from "./master/user-master-client";
 export * from "./directives/attachment-list";
+export * from "./directives/approval-queue-actions";
 export * from "./directives/directive-card";
 export * from "./directives/directive-form";
 export * from "./directives/directive-status-badge";

@@ -7,20 +7,30 @@ export type NavigationItem = {
   label: string;
 };
 
+function isActivePath(currentPath: string, href: string, items: NavigationItem[]) {
+  if (currentPath === href) {
+    return true;
+  }
+
+  if (!currentPath.startsWith(`${href}/`)) {
+    return false;
+  }
+
+  return !items.some(
+    (item) => item.href !== href && currentPath.startsWith(`${item.href}/`) && item.href.length > href.length,
+  );
+}
+
 type TopNavProps = {
   currentPath: string;
   items: NavigationItem[];
 };
 
-function isActivePath(currentPath: string, href: string) {
-  return currentPath === href || currentPath.startsWith(`${href}/`);
-}
-
 export function TopNav({ currentPath, items }: TopNavProps) {
   return (
     <nav className="flex w-full flex-wrap gap-2 xl:justify-end">
       {items.map((item) => {
-        const isActive = isActivePath(currentPath, item.href);
+        const isActive = isActivePath(currentPath, item.href, items);
 
         return (
           <Link

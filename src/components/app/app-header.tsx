@@ -25,9 +25,9 @@ export function AppHeader({
 }: AppHeaderProps) {
   return (
     <header className="relative overflow-hidden border-b border-brand-950/8 bg-[linear-gradient(180deg,var(--color-brand-950),#0a274b)] text-white shadow-[0_28px_90px_rgba(3,19,38,0.24)]">
-      <div className="brand-grid absolute inset-0 opacity-30" />
-      <div className="absolute left-[-8rem] top-[-6rem] h-72 w-72 rounded-full bg-brand-500/18 blur-3xl" />
-      <div className="absolute bottom-[-8rem] right-[-5rem] h-96 w-96 rounded-full bg-brand-700/30 blur-3xl" />
+      <div className="pointer-events-none brand-grid absolute inset-0 opacity-30" />
+      <div className="pointer-events-none absolute left-[-8rem] top-[-6rem] h-72 w-72 rounded-full bg-brand-500/18 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-8rem] right-[-5rem] h-96 w-96 rounded-full bg-brand-700/30 blur-3xl" />
 
       <div className="app-container relative py-5 sm:py-6">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
@@ -38,22 +38,20 @@ export function AppHeader({
                   CN
                 </span>
                 <div>
-                  <p className="text-sm font-semibold tracking-[0.22em] text-brand-100">CN FOOD</p>
-                  <p className="text-xs font-medium text-white/60">CN EXEFLOW</p>
+                  <p className="text-sm font-semibold tracking-[0.22em] text-brand-100">씨엔푸드</p>
+                  <p className="text-xs font-medium text-white/60">실행 통제 시스템</p>
                 </div>
               </Link>
 
-              <StatusPill tone="muted">Internal Execution Control</StatusPill>
+              <StatusPill tone="muted">대표 지시 기반 실행 통제</StatusPill>
             </div>
 
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-100/70">
-                운영 통제 플랫폼
+              <p className="text-[11px] font-semibold tracking-[0.26em] text-brand-100/70 uppercase">
+                실행 통제 플랫폼
               </p>
               <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-[2rem]">{title}</h1>
-              {description ? (
-                <p className="max-w-3xl text-sm leading-7 text-white/74">{description}</p>
-              ) : null}
+              {description ? <p className="max-w-3xl text-sm leading-7 text-white/74">{description}</p> : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -77,8 +75,8 @@ export function AppHeader({
                 </div>
 
                 <div className="space-y-2 text-right">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">
-                    Live Priority
+                  <p className="text-[11px] font-semibold tracking-[0.2em] text-brand-100/72 uppercase">
+                    실시간 우선순위
                   </p>
                   <div className="loading-bar h-2 w-24 rounded-full bg-white/10">
                     <div className="h-full w-3/4 rounded-full bg-[linear-gradient(90deg,var(--color-brand-500),#93c5fd)]" />

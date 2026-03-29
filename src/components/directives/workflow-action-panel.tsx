@@ -11,24 +11,28 @@ type WorkflowActionPanelProps = {
   canApprove?: boolean;
   canReject?: boolean;
   canRequestCompletion?: boolean;
+  canResumeProgress?: boolean;
   departmentId: string;
   departmentLabel: string;
   directiveId: string;
+  helperText?: string;
 };
 
 export function WorkflowActionPanel({
   canApprove = false,
   canReject = false,
   canRequestCompletion = false,
+  canResumeProgress = false,
   departmentId,
   departmentLabel,
   directiveId,
+  helperText,
 }: WorkflowActionPanelProps) {
   const [reason, setReason] = useState("");
   const [isPending, setIsPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (!canRequestCompletion && !canApprove && !canReject) {
+  if (!canRequestCompletion && !canApprove && !canReject && !canResumeProgress) {
     return null;
   }
 
@@ -55,21 +59,30 @@ export function WorkflowActionPanel({
     }
   }
 
+  const memoLabel = canRequestCompletion ? "결과 요약" : "처리 메모";
+  const memoHint = canRequestCompletion
+    ? "완료 요청 시 결과 요약을 5자 이상 입력해야 합니다."
+    : "승인, 반려, 재진행 사유를 남겨두면 추적에 도움이 됩니다.";
+  const memoPlaceholder = canRequestCompletion
+    ? "예: 진열 교체와 증빙 업로드를 모두 완료했고 현장 확인까지 마쳤습니다."
+    : "예: 추가 증빙 확인 완료 / 보완 후 재진행 승인";
+
   return (
     <div className="space-y-4 rounded-3xl border border-ink-200 bg-white p-5">
       <div>
         <h3 className="text-base font-semibold text-ink-950">{departmentLabel} 상태 처리</h3>
         <p className="mt-1 text-sm text-ink-700">
-          부서 단위로 완료 요청, 승인, 반려를 처리하고 상위 지시 상태는 자동으로 다시 집계합니다.
+          부서 단위로 완료 요청, 승인, 반려, 재진행을 처리하고 상위 지시 상태는 자동으로 다시 집계됩니다.
         </p>
+        {helperText ? <p className="mt-2 text-sm text-ink-600">{helperText}</p> : null}
       </div>
 
       <FieldGroup>
-        <FieldLabel label="사유 메모" hint="반려 사유나 확인 메모가 있으면 남겨 주세요." />
+        <FieldLabel label={memoLabel} hint={memoHint} />
         <Textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="예: 증빙 확인 완료 / 추가 사진 보강 필요"
+          placeholder={memoPlaceholder}
         />
       </FieldGroup>
 
@@ -87,6 +100,19 @@ export function WorkflowActionPanel({
             loadingLabel="요청 중"
           >
             완료 요청
+          </Button>
+        ) : null}
+
+        {canResumeProgress ? (
+          <Button
+            size="md"
+            variant="secondary"
+            onClick={() => void runAction(`/api/directives/${directiveId}/resume-progress`)}
+            disabled={Boolean(isPending)}
+            isLoading={isPending === `/api/directives/${directiveId}/resume-progress`}
+            loadingLabel="재진행 처리 중"
+          >
+            재진행
           </Button>
         ) : null}
 

@@ -22,7 +22,7 @@ export default async function EditDirectiveLogPage({ params }: EditDirectiveLogP
     directive = await getDirectiveDetailForSession(session, directiveId);
 
     if (!directive.workflow.canManageLogs) {
-      throw new Error("이 지시사항의 행동 로그를 수정할 권한이 없습니다.");
+      throw new Error("이 지시의 행동 로그를 수정할 권한이 없습니다.");
     }
 
     const targetLog = directive.logs.find((log) => log.id === logId);

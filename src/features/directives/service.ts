@@ -4,6 +4,7 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
 import type { AppSession } from "@/features/auth/types";
 import {
+  canApproveDirective,
   canViewDashboard,
   isAdminRole,
   isExecutiveRole,
@@ -16,6 +17,8 @@ import { sanitizeFileName } from "@/lib/utils";
 
 import { normalizeUrgentLevel } from "./schemas";
 import type {
+  DirectiveApprovalQueueData,
+  DirectiveApprovalQueueItem,
   CreateDirectiveInput,
   CreateDirectiveLogInput,
   DashboardData,
@@ -43,6 +46,7 @@ import type {
   UserRecord,
   WorkflowDecisionInput,
 } from "./types";
+import { validateCompletionRequestReason, validateDirectiveLogSubmission } from "./validation";
 
 const DIRECTIVE_NUMBER_PREFIX = "CN";
 const DIRECTIVE_EVIDENCE_BUCKET = "directive-evidence";
@@ -60,6 +64,22 @@ type DepartmentActivityMaps = {
   attachmentCountByDepartmentId: Map<string, number>;
   lastActivityAtByDepartmentId: Map<string, string>;
   logCountByDepartmentId: Map<string, number>;
+};
+
+type CompletionRequestAuditRecord = {
+  acted_at: string;
+  acted_by: string;
+  after_data: {
+    current?: unknown;
+    metadata?: Record<string, unknown>;
+  } | null;
+  entity_id: string;
+};
+
+type CompletionRequestAuditSummary = {
+  requestedAt: string;
+  requestedBy: string | null;
+  requestReason: string | null;
 };
 
 type DirectiveAssignmentSummary = {
@@ -607,6 +627,14 @@ function buildDirectiveAssignmentSummary(options: {
         assignmentRole,
         assignedAt: assignment.assigned_at,
         attachmentCount,
+        canRequestCompletion:
+          isCurrentDepartment &&
+          options.session.role === "DEPARTMENT_HEAD" &&
+          ["IN_PROGRESS", "DELAYED"].includes(assignment.department_status),
+        canResumeProgress:
+          isCurrentDepartment &&
+          options.session.role === "DEPARTMENT_HEAD" &&
+          assignment.department_status === "REJECTED",
         departmentCode: department?.code ?? null,
         departmentHeadId: assignment.department_head_id,
         departmentHeadName: buildUserDisplayName(departmentHead),
@@ -616,12 +644,13 @@ function buildDirectiveAssignmentSummary(options: {
         dueDate: assignment.department_due_date,
         isCurrentDepartment,
         isPrimary,
-        isRequestableByCurrentUser:
+        isReadyForCompletionRequest:
           isCurrentDepartment &&
           options.session.role === "DEPARTMENT_HEAD" &&
-          assignment.department_status === "IN_PROGRESS" &&
+          ["IN_PROGRESS", "DELAYED"].includes(assignment.department_status) &&
           logCount > 0 &&
-          attachmentCount > 0,
+          attachmentCount > 0 &&
+          Boolean(options.directive.owner_user_id),
         lastActivityAt,
         logCount,
       };
@@ -661,6 +690,7 @@ function mapDirectiveSummary(options: {
   departmentAssignmentsMap: Map<string, DirectiveDepartmentRow[]>;
   departmentMap: Map<string, DepartmentRecord>;
   directive: DirectiveRow;
+  sessionDepartmentId?: string | null;
   userMap: Map<string, UserRecord>;
 }) {
   const ownerDepartment = options.directive.owner_department_id
@@ -671,6 +701,9 @@ function mapDirectiveSummary(options: {
   const directiveAssignments = options.departmentAssignmentsMap.get(options.directive.id) ?? [];
   const creationMetadata = options.creationMetadataMap.get(options.directive.id);
   const departmentProgress = createStatusCountMap();
+  const currentDepartmentAssignment = options.sessionDepartmentId
+    ? directiveAssignments.find((assignment) => assignment.department_id === options.sessionDepartmentId) ?? null
+    : null;
 
   for (const assignment of directiveAssignments) {
     departmentProgress[assignment.department_status] += 1;
@@ -690,8 +723,11 @@ function mapDirectiveSummary(options: {
       computeIsDelayed(options.directive.due_date, options.directive.status) ||
       departmentProgress.DELAYED > 0,
     isUrgent: options.directive.is_urgent,
+    currentDepartmentId: currentDepartmentAssignment?.department_id ?? null,
+    currentDepartmentStatus: currentDepartmentAssignment?.department_status ?? null,
     ownerDepartmentCode: ownerDepartment?.code ?? null,
     ownerDepartmentName: ownerDepartment?.name ?? null,
+    ownerUserId: options.directive.owner_user_id,
     ownerUserName: buildUserDisplayName(ownerUser),
     status: options.directive.status,
     supportDepartmentCount: Math.max(0, targetDepartmentCount - 1),
@@ -820,7 +856,7 @@ function canManageDirectiveLogs(
   );
 }
 
-function canRequestDirectiveCompletion(
+function canShowDirectiveCompletionRequest(
   session: AppSession,
   currentDepartment: DirectiveDepartmentProgress | null,
 ) {
@@ -828,11 +864,22 @@ function canRequestDirectiveCompletion(
     return false;
   }
 
-  if (currentDepartment.logCount < 1 || currentDepartment.attachmentCount < 1) {
+  if (!["IN_PROGRESS", "DELAYED"].includes(currentDepartment.departmentStatus)) {
     return false;
   }
 
-  if (currentDepartment.departmentStatus !== "IN_PROGRESS") {
+  if (session.role !== "DEPARTMENT_HEAD" || !session.departmentId) {
+    return false;
+  }
+
+  return currentDepartment.departmentId === session.departmentId;
+}
+
+function canResumeDirectiveProgress(
+  session: AppSession,
+  currentDepartment: DirectiveDepartmentProgress | null,
+) {
+  if (!currentDepartment || currentDepartment.departmentStatus !== "REJECTED") {
     return false;
   }
 
@@ -950,18 +997,22 @@ function resolveRequestedDepartmentId(
 async function promoteDirectiveToInProgressIfNeeded(
   client: SupabaseClient,
   directive: DirectiveRow,
+  directiveDepartments: DirectiveDepartmentRow[],
   departmentId: string | null,
 ) {
-  if (!["NEW", "REJECTED", "DELAYED"].includes(directive.status)) {
-    return;
-  }
+  const currentDepartment =
+    departmentId
+      ? directiveDepartments.find((assignment) => assignment.department_id === departmentId) ?? null
+      : null;
 
-  await updateDirectiveStatus(client, directive.id, "IN_PROGRESS");
-
-  if (departmentId) {
+  if (currentDepartment?.department_status === "NEW") {
     await updateDirectiveDepartmentStatus(client, directive.id, "IN_PROGRESS", {
       departmentId,
     });
+  }
+
+  if (directive.status === "NEW") {
+    await updateDirectiveStatus(client, directive.id, "IN_PROGRESS");
   }
 }
 
@@ -1045,6 +1096,10 @@ async function uploadDirectiveAttachments(options: {
 
 function coerceFiles(files?: FormDataEntryValue[]) {
   return (files ?? []).filter((value): value is File => value instanceof File);
+}
+
+function countUploadableFiles(files: File[]) {
+  return files.filter((file) => file.size > 0 && file.name).length;
 }
 
 async function buildAttachmentItems(
@@ -1140,12 +1195,67 @@ async function buildRecentUpdates(
         directiveNo: directive.directiveNo,
         directiveTitle: directive.title,
         happenedAt: meta.happenedAt,
+        logId: log.id,
         logType: meta.logType,
         userName: buildUserDisplayName(usersMap.get(log.user_id)),
       };
     })
     .filter((item): item is DashboardRecentUpdate => Boolean(item))
     .slice(0, limit);
+}
+
+function buildDirectiveDepartmentKey(directiveId: string, departmentId: string) {
+  return `${directiveId}:${departmentId}`;
+}
+
+async function loadCompletionRequestAuditSummaryMap(client: SupabaseClient, directiveIds: string[]) {
+  const summaryMap = new Map<string, CompletionRequestAuditSummary>();
+
+  if (directiveIds.length === 0) {
+    return summaryMap;
+  }
+
+  const { data, error } = await client
+    .from("audit_logs")
+    .select("entity_id, acted_at, acted_by, after_data")
+    .eq("entity_type", "directive")
+    .eq("action", "DIRECTIVE_COMPLETION_REQUESTED")
+    .in("entity_id", directiveIds)
+    .order("acted_at", { ascending: false });
+
+  if (error) {
+    throw mapSupabaseError(
+      error,
+      "완료 요청 이력을 불러오지 못했습니다.",
+      "DIRECTIVE_COMPLETION_REQUEST_HISTORY_FAILED",
+    );
+  }
+
+  for (const row of (data ?? []) as CompletionRequestAuditRecord[]) {
+    const metadata =
+      row.after_data && typeof row.after_data.metadata === "object" && row.after_data.metadata !== null
+        ? row.after_data.metadata
+        : null;
+    const departmentId = typeof metadata?.departmentId === "string" ? metadata.departmentId : null;
+
+    if (!departmentId || !row.entity_id) {
+      continue;
+    }
+
+    const key = buildDirectiveDepartmentKey(row.entity_id, departmentId);
+
+    if (summaryMap.has(key)) {
+      continue;
+    }
+
+    summaryMap.set(key, {
+      requestReason: typeof metadata?.reason === "string" ? metadata.reason : null,
+      requestedAt: row.acted_at,
+      requestedBy: typeof row.acted_by === "string" ? row.acted_by : null,
+    });
+  }
+
+  return summaryMap;
 }
 
 export async function createDirectiveAsSession(session: AppSession, input: CreateDirectiveInput) {
@@ -1302,6 +1412,10 @@ export async function listDirectivesForSession(
     query = query.eq("status", filters.status);
   }
 
+  if (filters.urgent !== undefined) {
+    query = query.eq("is_urgent", filters.urgent);
+  }
+
   if (filters.search) {
     const searchTerm = sanitizeSearchTerm(filters.search);
 
@@ -1350,6 +1464,7 @@ export async function listDirectivesForSession(
       departmentAssignmentsMap: directiveDepartmentsMap,
       departmentMap: departmentsMap,
       directive: row,
+      sessionDepartmentId: session.departmentId,
       userMap: usersMap,
     }),
   );
@@ -1498,7 +1613,7 @@ export async function getDirectiveDetailForSession(session: AppSession, directiv
       canCreateDirective: isAdminRole(session.role) || isExecutiveRole(session.role),
       canManageMultipleDepartments: isAdminRole(session.role) || isExecutiveRole(session.role),
       canManageLogs: canManageDirectiveLogs(session, directive, directiveDepartments),
-      canRequestCompletion: canRequestDirectiveCompletion(session, assignmentSummary.currentDepartment),
+      canRequestCompletion: canShowDirectiveCompletionRequest(session, assignmentSummary.currentDepartment),
       currentDepartmentId: assignmentSummary.currentDepartment?.departmentId ?? session.departmentId ?? null,
       isReadOnly: isReadOnlyRole(session.role),
     },
@@ -1512,6 +1627,7 @@ export async function createDirectiveLogAsSession(
 ) {
   const client = createSupabaseServerClient();
   const { directive, directiveDepartments } = await readDirectiveContext(client, input.directiveId);
+  const uploadFiles = coerceFiles(files);
   assertDirectiveViewAccess(session, directive, directiveDepartments);
 
   if (!canManageDirectiveLogs(session, directive, directiveDepartments)) {
@@ -1531,6 +1647,15 @@ export async function createDirectiveLogAsSession(
 
   if (!directiveDepartments.some((assignment) => assignment.department_id === departmentId)) {
     throw new ApiError(403, "대상 부서에 배정된 지시사항에만 로그를 남길 수 있습니다.", null, "DIRECTIVE_LOG_DEPARTMENT_INVALID");
+  }
+
+  const validationMessage = validateDirectiveLogSubmission({
+    ...input,
+    attachmentCount: countUploadableFiles(uploadFiles),
+  });
+
+  if (validationMessage) {
+    throw new ApiError(400, validationMessage, null, "DIRECTIVE_LOG_INVALID");
   }
 
   const insertResult = await client
@@ -1560,12 +1685,12 @@ export async function createDirectiveLogAsSession(
     client,
     departmentId,
     directiveId: input.directiveId,
-    files: coerceFiles(files),
+    files: uploadFiles,
     logId: insertResult.data.id,
     uploadedBy: session.userId,
   });
 
-  await promoteDirectiveToInProgressIfNeeded(client, directive, departmentId);
+  await promoteDirectiveToInProgressIfNeeded(client, directive, directiveDepartments, departmentId);
   await syncDirectiveAggregateStatus(client, directive.id);
   await recordHistory(client, {
     action: "DIRECTIVE_LOG_CREATED",
@@ -1590,6 +1715,7 @@ export async function updateDirectiveLogAsSession(
 ) {
   const client = createSupabaseServerClient();
   const { directive, directiveDepartments } = await readDirectiveContext(client, input.directiveId);
+  const uploadFiles = coerceFiles(files);
   assertDirectiveViewAccess(session, directive, directiveDepartments);
 
   if (!canManageDirectiveLogs(session, directive, directiveDepartments)) {
@@ -1627,6 +1753,29 @@ export async function updateDirectiveLogAsSession(
     throw new ApiError(403, "대상 부서에 배정된 지시사항 로그만 수정할 수 있습니다.", null, "DIRECTIVE_LOG_DEPARTMENT_INVALID");
   }
 
+  const existingAttachmentsQuery = await client
+    .from("directive_attachments")
+    .select("id", { count: "exact", head: true })
+    .eq("directive_id", input.directiveId)
+    .eq("log_id", input.logId);
+
+  if (existingAttachmentsQuery.error) {
+    throw mapSupabaseError(
+      existingAttachmentsQuery.error,
+      "기존 증빙 정보를 확인하지 못했습니다.",
+      "DIRECTIVE_LOG_ATTACHMENT_CHECK_FAILED",
+    );
+  }
+
+  const validationMessage = validateDirectiveLogSubmission({
+    ...input,
+    attachmentCount: (existingAttachmentsQuery.count ?? 0) + countUploadableFiles(uploadFiles),
+  });
+
+  if (validationMessage) {
+    throw new ApiError(400, validationMessage, null, "DIRECTIVE_LOG_INVALID");
+  }
+
   const updateResult = await client
     .from("directive_logs")
     .update({
@@ -1655,12 +1804,12 @@ export async function updateDirectiveLogAsSession(
     client,
     departmentId,
     directiveId: input.directiveId,
-    files: coerceFiles(files),
+    files: uploadFiles,
     logId: input.logId,
     uploadedBy: session.userId,
   });
 
-  await promoteDirectiveToInProgressIfNeeded(client, directive, departmentId);
+  await promoteDirectiveToInProgressIfNeeded(client, directive, directiveDepartments, departmentId);
   await syncDirectiveAggregateStatus(client, directive.id);
   await recordHistory(client, {
     action: "DIRECTIVE_LOG_UPDATED",
@@ -1748,13 +1897,28 @@ export async function requestDirectiveCompletionAsSession(session: AppSession, i
     detail.departments.find((department) => department.departmentId === detail.workflow.currentDepartmentId) ??
     null;
 
-  if (!targetDepartment || !detail.workflow.canRequestCompletion || !targetDepartment.isRequestableByCurrentUser) {
+  if (!targetDepartment || !targetDepartment.canRequestCompletion || !detail.workflow.canRequestCompletion) {
     throw new ApiError(
       400,
-      "해당 부서는 진행 중 상태에서 실행 로그와 증빙이 모두 있어야 완료 요청이 가능합니다.",
+      "해당 부서는 진행 중 또는 지연 상태에서만 완료 요청을 진행할 수 있습니다.",
       null,
       "DIRECTIVE_COMPLETION_REQUEST_DENIED",
     );
+  }
+
+  if (!targetDepartment.isReadyForCompletionRequest) {
+    throw new ApiError(
+      400,
+      "로그 1건 이상, 증빙 1건 이상, 담당자 지정이 모두 완료되어야 완료 요청을 진행할 수 있습니다.",
+      null,
+      "DIRECTIVE_COMPLETION_REQUEST_CHECKLIST_INCOMPLETE",
+    );
+  }
+
+  const completionReasonError = validateCompletionRequestReason(input.reason);
+
+  if (completionReasonError) {
+    throw new ApiError(400, completionReasonError, null, "DIRECTIVE_COMPLETION_REASON_REQUIRED");
   }
 
   await updateDirectiveDepartmentStatus(client, input.directiveId, "COMPLETION_REQUESTED", {
@@ -1776,7 +1940,7 @@ export async function requestDirectiveCompletionAsSession(session: AppSession, i
 }
 
 export async function approveDirectiveCompletionAsSession(session: AppSession, input: WorkflowDecisionInput) {
-  if (!isAdminRole(session.role) && !isExecutiveRole(session.role)) {
+  if (!canApproveDirective(session.role)) {
     throw new ApiError(403, "완료 승인 권한이 없습니다.", null, "DIRECTIVE_APPROVE_DENIED");
   }
 
@@ -1820,7 +1984,7 @@ export async function approveDirectiveCompletionAsSession(session: AppSession, i
 }
 
 export async function rejectDirectiveCompletionAsSession(session: AppSession, input: WorkflowDecisionInput) {
-  if (!isAdminRole(session.role) && !isExecutiveRole(session.role)) {
+  if (!canApproveDirective(session.role)) {
     throw new ApiError(403, "반려 권한이 없습니다.", null, "DIRECTIVE_REJECT_DENIED");
   }
 
@@ -1854,6 +2018,36 @@ export async function rejectDirectiveCompletionAsSession(session: AppSession, in
     metadata: {
       departmentId: targetDepartment.department_id,
       directiveNo: directive.directive_no,
+      directiveStatus,
+      reason: input.reason,
+    },
+  });
+}
+
+export async function resumeDirectiveProgressAsSession(session: AppSession, input: WorkflowDecisionInput) {
+  const detail = await getDirectiveDetailForSession(session, input.directiveId);
+  const targetDepartment =
+    detail.departments.find((department) => department.departmentId === input.departmentId) ??
+    detail.departments.find((department) => department.departmentId === detail.workflow.currentDepartmentId) ??
+    null;
+
+  if (!targetDepartment || !targetDepartment.canResumeProgress || !canResumeDirectiveProgress(session, targetDepartment)) {
+    throw new ApiError(400, "반려된 부서만 재진행으로 전환할 수 있습니다.", null, "DIRECTIVE_RESUME_DENIED");
+  }
+
+  const client = createSupabaseServerClient();
+  await updateDirectiveDepartmentStatus(client, input.directiveId, "IN_PROGRESS", {
+    departmentId: targetDepartment.departmentId,
+  });
+  const directiveStatus = await syncDirectiveAggregateStatus(client, input.directiveId);
+  await recordHistory(client, {
+    action: "DIRECTIVE_RESUMED",
+    actorId: session.userId,
+    entityId: input.directiveId,
+    entityType: "directive",
+    metadata: {
+      departmentId: targetDepartment.departmentId,
+      departmentName: targetDepartment.departmentName,
       directiveStatus,
       reason: input.reason,
     },
@@ -1915,6 +2109,7 @@ async function loadDirectiveItemsForDashboard(client: SupabaseClient, session: A
         departmentAssignmentsMap: directiveDepartmentsMap,
         departmentMap: departmentsMap,
         directive: row,
+        sessionDepartmentId: session.departmentId,
         userMap: usersMap,
       }),
     ),
@@ -1923,12 +2118,13 @@ async function loadDirectiveItemsForDashboard(client: SupabaseClient, session: A
 
 export async function getDashboardData(session: AppSession): Promise<DashboardData> {
   if (!canViewDashboard(session.role) && !isAdminRole(session.role)) {
-    throw new ApiError(403, "대시보드를 볼 권한이 없습니다.", null, "DASHBOARD_ACCESS_DENIED");
+    throw new ApiError(403, "대표 대시보드를 볼 권한이 없습니다.", null, "DASHBOARD_ACCESS_DENIED");
   }
 
   const client = createSupabaseServerClient();
   const { accessibleIds, items } = await loadDirectiveItemsForDashboard(client, session);
   const recentUpdates = await buildRecentUpdates(client, items, accessibleIds, 8);
+  const waitingApprovalCount = items.filter((item) => item.status === "COMPLETION_REQUESTED").length;
 
   return {
     delayedItems: items.filter((item) => item.isDelayed).slice(0, 6),
@@ -1939,25 +2135,31 @@ export async function getDashboardData(session: AppSession): Promise<DashboardDa
         label: "진행 중",
         tone: "muted",
         value: items.filter((item) => item.status === "IN_PROGRESS").length,
-        description: "현장 실행이 이어지는 건",
+        description: "현재 실행이 이어지는 지시",
       },
       {
         label: "지연",
         tone: "warning",
         value: items.filter((item) => item.isDelayed).length,
-        description: "조치가 밀리기 시작한 건",
+        description: "즉시 점검이 필요한 일정",
       },
       {
         label: "완료",
         tone: "success",
         value: items.filter((item) => item.status === "COMPLETED").length,
-        description: "승인 완료된 건",
+        description: "승인까지 끝난 실행",
       },
       {
         label: "긴급",
         tone: "danger",
         value: items.filter((item) => item.isUrgent).length,
-        description: "즉시 판단이 필요한 건",
+        description: "즉시 확인이 필요한 항목",
+      },
+      {
+        label: "승인 대기",
+        tone: "default",
+        value: waitingApprovalCount,
+        description: "부서별 완료 요청이 올라온 항목",
       },
     ],
     recentUpdates,
@@ -1990,35 +2192,188 @@ export async function getDepartmentBoardData(session: AppSession): Promise<Depar
       .slice(0, 6),
     items,
     kpis: [
-      { label: "배정 건수", tone: "default", value: items.length, description: "우리 부서가 읽을 전체 건" },
+      { label: "배정 건수", tone: "default", value: items.length, description: "우리 부서에 연결된 전체 지시" },
       {
         label: "진행 중",
         tone: "muted",
         value: items.filter((item) => item.status === "IN_PROGRESS").length,
-        description: "담당자 실행이 진행되는 건",
+        description: "현재 실행 중인 항목",
       },
       {
         label: "승인 대기",
         tone: "default",
         value: items.filter((item) => item.status === "COMPLETION_REQUESTED").length,
-        description: "완료 요청 후 승인 대기 건",
+        description: "완료 요청 후 승인을 기다리는 항목",
       },
       {
         label: "지연",
         tone: "warning",
         value: items.filter((item) => item.isDelayed).length,
-        description: "마감 리스크가 드러난 건",
+        description: "마감 리스크가 있는 항목",
       },
       {
         label: "증빙 필요",
         tone: "danger",
         value: missingEvidenceItems.length,
-        description: "로그나 증빙이 비어 있는 건",
+        description: "로그는 있지만 증빙이 비어 있는 항목",
       },
     ],
     missingEvidenceItems,
     recentUpdates,
     urgentItems: items.filter((item) => item.isUrgent && item.status !== "COMPLETED").slice(0, 6),
     waitingApprovalItems: items.filter((item) => item.status === "COMPLETION_REQUESTED").slice(0, 6),
+  };
+}
+
+export async function getDirectiveApprovalQueueForSession(
+  session: AppSession,
+): Promise<DirectiveApprovalQueueData> {
+  if (!canApproveDirective(session.role)) {
+    throw new ApiError(403, "승인 대기 큐를 조회할 권한이 없습니다.", null, "DIRECTIVE_APPROVAL_QUEUE_DENIED");
+  }
+
+  const client = createSupabaseServerClient();
+  const { data, error } = await client
+    .from("directive_departments")
+    .select("directive_id, department_id, department_status, updated_at")
+    .eq("department_status", "COMPLETION_REQUESTED")
+    .order("updated_at", { ascending: false, nullsFirst: false });
+
+  if (error) {
+    throw mapSupabaseError(
+      error,
+      "승인 대기 큐를 불러오지 못했습니다.",
+      "DIRECTIVE_APPROVAL_QUEUE_LOAD_FAILED",
+    );
+  }
+
+  const queueRows = (data ?? []) as Pick<
+    DirectiveDepartmentRow,
+    "department_id" | "department_status" | "directive_id" | "updated_at"
+  >[];
+
+  if (queueRows.length === 0) {
+    return {
+      items: [],
+      total: 0,
+    };
+  }
+
+  const directiveIds = Array.from(new Set(queueRows.map((row) => row.directive_id)));
+  const departmentIds = Array.from(new Set(queueRows.map((row) => row.department_id)));
+
+  const [directivesQuery, departmentsMap, requestAuditMap, logsQuery, attachmentsQuery] = await Promise.all([
+    client
+      .from("directives")
+      .select("id, directive_no, title, created_at")
+      .in("id", directiveIds),
+    loadDepartmentsMap(client, departmentIds),
+    loadCompletionRequestAuditSummaryMap(client, directiveIds),
+    client
+      .from("directive_logs")
+      .select("id, directive_id, department_id")
+      .eq("is_deleted", false)
+      .in("directive_id", directiveIds),
+    client
+      .from("directive_attachments")
+      .select("id, directive_id, log_id")
+      .in("directive_id", directiveIds),
+  ]);
+
+  if (directivesQuery.error) {
+    throw mapSupabaseError(
+      directivesQuery.error,
+      "승인 대기 지시 정보를 불러오지 못했습니다.",
+      "DIRECTIVE_APPROVAL_QUEUE_DIRECTIVES_FAILED",
+    );
+  }
+
+  if (logsQuery.error) {
+    throw mapSupabaseError(logsQuery.error, "승인 대기 로그 정보를 불러오지 못했습니다.", "DIRECTIVE_APPROVAL_QUEUE_LOGS_FAILED");
+  }
+
+  if (attachmentsQuery.error) {
+    throw mapSupabaseError(
+      attachmentsQuery.error,
+      "승인 대기 증빙 정보를 불러오지 못했습니다.",
+      "DIRECTIVE_APPROVAL_QUEUE_ATTACHMENTS_FAILED",
+    );
+  }
+
+  const directivesMap = new Map(
+    ((directivesQuery.data ?? []) as Array<Pick<DirectiveRow, "created_at" | "directive_no" | "id" | "title">>).map(
+      (directive) => [directive.id, directive],
+    ),
+  );
+  const logCountByKey = new Map<string, number>();
+  const attachmentCountByKey = new Map<string, number>();
+  const logKeyById = new Map<string, string>();
+  const filteredDepartmentIds = new Set(departmentIds);
+
+  for (const log of (logsQuery.data ?? []) as Array<Pick<DirectiveLogRow, "department_id" | "directive_id" | "id">>) {
+    if (!filteredDepartmentIds.has(log.department_id)) {
+      continue;
+    }
+
+    const key = buildDirectiveDepartmentKey(log.directive_id, log.department_id);
+    logCountByKey.set(key, (logCountByKey.get(key) ?? 0) + 1);
+    logKeyById.set(log.id, key);
+  }
+
+  for (const attachment of (attachmentsQuery.data ?? []) as Array<Pick<DirectiveAttachmentRow, "directive_id" | "id" | "log_id">>) {
+    if (!attachment.log_id) {
+      continue;
+    }
+
+    const key = logKeyById.get(attachment.log_id);
+
+    if (!key) {
+      continue;
+    }
+
+    attachmentCountByKey.set(key, (attachmentCountByKey.get(key) ?? 0) + 1);
+  }
+
+  const requesterIds = Array.from(
+    new Set(
+      Array.from(requestAuditMap.values())
+        .map((item) => item.requestedBy)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const requesterMap = await loadUsersMap(client, requesterIds);
+
+  const items = queueRows
+    .map<DirectiveApprovalQueueItem | null>((row) => {
+      const directive = directivesMap.get(row.directive_id);
+
+      if (!directive) {
+        return null;
+      }
+
+      const key = buildDirectiveDepartmentKey(row.directive_id, row.department_id);
+      const auditSummary = requestAuditMap.get(key);
+
+      return {
+        attachmentCount: attachmentCountByKey.get(key) ?? 0,
+        departmentId: row.department_id,
+        directiveId: row.directive_id,
+        directiveNo: directive.directive_no,
+        logCount: logCountByKey.get(key) ?? 0,
+        requestDepartmentName: departmentsMap.get(row.department_id)?.name ?? null,
+        requestReason: auditSummary?.requestReason ?? null,
+        requestedAt: auditSummary?.requestedAt ?? row.updated_at ?? directive.created_at,
+        requesterName: auditSummary?.requestedBy
+          ? buildUserDisplayName(requesterMap.get(auditSummary.requestedBy))
+          : null,
+        title: directive.title,
+      };
+    })
+    .filter((item): item is DirectiveApprovalQueueItem => Boolean(item))
+    .sort((left, right) => new Date(right.requestedAt).getTime() - new Date(left.requestedAt).getTime());
+
+  return {
+    items,
+    total: items.length,
   };
 }

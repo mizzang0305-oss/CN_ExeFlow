@@ -1,4 +1,5 @@
-import { directiveUrgentLevelLabels, type DirectiveUrgentLevel } from "@/features/directives";
+import { directiveUrgentLevelLabels } from "@/features/directives/constants";
+import type { DirectiveUrgentLevel } from "@/features/directives/types";
 
 import { Badge } from "@/components/ui/badge";
 

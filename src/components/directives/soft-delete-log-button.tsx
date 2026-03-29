@@ -54,7 +54,7 @@ export function SoftDeleteLogButton({ directiveId, logId }: SoftDeleteLogButtonP
         완전 삭제가 아니라 일반 화면에서만 숨깁니다.
       </p>
       <Input
-        placeholder="사유를 남기면 추적이 쉬워집니다"
+        placeholder="사유를 남기면 추적이 쉬워집니다."
         value={reason}
         onChange={(event) => setReason(event.target.value)}
         className="border-danger-200"

@@ -1,1 +1,1 @@
-export { getDashboardData } from "@/features/directives";
+export { getDashboardData } from "@/features/directives/service";

@@ -2,6 +2,7 @@ import { getCurrentSession } from "@/features/auth";
 import {
   createDirectiveLogAsSession,
   logPayloadSchema,
+  validateDirectiveLogSubmission,
 } from "@/features/directives";
 import { createApiErrorResponse, createApiSuccessResponse, handleApiError } from "@/lib/api";
 
@@ -26,6 +27,9 @@ export async function POST(request: Request, context: DirectiveLogsRouteContext)
 
     const { directiveId } = await context.params;
     const formData = await request.formData();
+    const files = formData
+      .getAll("attachments")
+      .filter((value): value is File => value instanceof File && value.size > 0 && Boolean(value.name));
     const payload = {
       actionSummary: String(formData.get("actionSummary") ?? ""),
       departmentId: String(formData.get("departmentId") ?? "") || null,
@@ -35,6 +39,18 @@ export async function POST(request: Request, context: DirectiveLogsRouteContext)
       nextAction: String(formData.get("nextAction") ?? "") || null,
       riskNote: String(formData.get("riskNote") ?? "") || null,
     };
+    const validationMessage = validateDirectiveLogSubmission({
+      ...payload,
+      attachmentCount: files.length,
+    });
+
+    if (validationMessage) {
+      return createApiErrorResponse(400, {
+        code: "DIRECTIVE_LOG_INVALID",
+        message: validationMessage,
+      });
+    }
+
     const parsed = logPayloadSchema.safeParse(payload);
 
     if (!parsed.success) {
