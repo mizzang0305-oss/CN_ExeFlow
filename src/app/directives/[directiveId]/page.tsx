@@ -126,13 +126,7 @@ export default async function DirectiveDetailPage({ params }: DirectiveDetailPag
             </div>
           </Card>
 
-          <WorkflowActionPanel
-            directiveId={directive.id}
-            canApprove={directive.workflow.canApprove}
-            canReject={directive.workflow.canReject}
-            canRequestCompletion={directive.workflow.canRequestCompletion}
-          />
-
+          
           <section className="space-y-4">
             <div>
               <h2 className="section-title">부서별 이행 현황</h2>
