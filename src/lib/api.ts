@@ -12,7 +12,7 @@ export function createPlaceholderResponse(resource: string): PlaceholderApiRespo
   return {
     resource,
     status: "pending",
-    message: "초기 API 스텁 상태입니다. 아직 비즈니스 로직이 연결되지 않았습니다.",
+    message: "초기 API 상태입니다. 아직 비즈니스 로직이 연결되지 않았습니다.",
   };
 }
 
@@ -70,12 +70,7 @@ export async function readJsonBody(
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType && !contentType.includes("application/json")) {
-    throw new ApiError(
-      415,
-      "JSON 형식으로 요청해주세요.",
-      { contentType },
-      "CONTENT_TYPE_INVALID",
-    );
+    throw new ApiError(415, "JSON 형식으로 요청해주세요.", { contentType }, "CONTENT_TYPE_INVALID");
   }
 
   try {
