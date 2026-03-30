@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import type { AppSession } from "@/features/auth/types";
 import { isAdminRole } from "@/features/auth/utils";
 import {
@@ -173,6 +175,14 @@ function buildWeeklyTrend(recentReports: Awaited<ReturnType<typeof getReportsOve
     }));
 }
 
+const loadCachedReportsOverview = unstable_cache(
+  async (session: AppSession) => getReportsOverview(session),
+  ["dashboard-reports-overview"],
+  {
+    revalidate: 60,
+  },
+);
+
 export async function getCeoDashboardData(session: AppSession): Promise<CeoDashboardData> {
   if (!isAdminRole(session.role)) {
     throw new ApiError(403, "CEO 대시보드는 대표와 슈퍼 관리자만 조회할 수 있습니다.", null, "CEO_DASHBOARD_DENIED");
@@ -181,7 +191,7 @@ export async function getCeoDashboardData(session: AppSession): Promise<CeoDashb
   const [dashboard, approvalQueue, reportsOverview] = await Promise.all([
     getDashboardData(session),
     getDirectiveApprovalQueueForSession(session),
-    getReportsOverview(session),
+    loadCachedReportsOverview(session),
   ]);
 
   const dueTodayItems = sortByDueDate(dashboard.items.filter(isDueToday)).slice(0, 6);
@@ -451,7 +461,7 @@ export async function getViewerHomeData(session: AppSession): Promise<ViewerHome
 
   const [listResult, reportsOverview] = await Promise.all([
     listDirectivesForSession(session, { page: 1, pageSize: 24 }),
-    getReportsOverview(session),
+    loadCachedReportsOverview(session),
   ]);
 
   const items = listResult.items;
