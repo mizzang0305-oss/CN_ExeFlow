@@ -21,6 +21,11 @@ type ReportDirectiveRow = {
   status: string;
 };
 
+type DirectiveApprovalAuditRow = {
+  acted_at: string;
+  entity_id: string;
+};
+
 type WeekRange = {
   end: string;
   endAt: string;
@@ -90,6 +95,7 @@ function getCurrentWeekRange(): WeekRange {
 function buildReportSnapshot(
   directives: ReportDirectiveRow[],
   weekRange: WeekRange,
+  completedAtByDirectiveId: Map<string, string>,
 ): ReportSnapshot {
   const startAt = new Date(weekRange.startAt).getTime();
   const endAt = new Date(weekRange.endAt).getTime();
@@ -102,11 +108,17 @@ function buildReportSnapshot(
     computeIsDelayed(directive.due_date, directive.status),
   ).length;
   const onTimeCompleted = completedDirectives.filter((directive) => {
+    const completedAt = completedAtByDirectiveId.get(directive.id);
+
     if (!directive.due_date) {
       return true;
     }
 
-    return new Date(directive.due_date).getTime() >= Date.now();
+    if (!completedAt) {
+      return false;
+    }
+
+    return new Date(directive.due_date).getTime() >= new Date(completedAt).getTime();
   });
 
   return {
@@ -122,6 +134,40 @@ function buildReportSnapshot(
         : (onTimeCompleted.length / completedDirectives.length) * 100,
     totalCount: directives.length,
   };
+}
+
+async function loadDirectiveCompletedAtMap(directiveIds: string[]) {
+  if (directiveIds.length === 0) {
+    return new Map<string, string>();
+  }
+
+  const client = createSupabaseServerClient();
+  const { data, error } = await client
+    .from("audit_logs")
+    .select("entity_id, acted_at")
+    .eq("entity_type", "directive")
+    .eq("action", "DIRECTIVE_APPROVED")
+    .in("entity_id", directiveIds)
+    .order("acted_at", { ascending: false });
+
+  if (error) {
+    throw new ApiError(
+      500,
+      "완료 승인 이력을 불러오지 못했습니다.",
+      error,
+      "WEEKLY_REPORT_COMPLETION_HISTORY_FAILED",
+    );
+  }
+
+  const map = new Map<string, string>();
+
+  for (const row of (data ?? []) as DirectiveApprovalAuditRow[]) {
+    if (!map.has(row.entity_id)) {
+      map.set(row.entity_id, row.acted_at);
+    }
+  }
+
+  return map;
 }
 
 function buildSummaryCards(snapshot: Pick<
@@ -263,6 +309,7 @@ export async function getReportsOverview(session: AppSession): Promise<ReportsOv
   const currentWeekReport =
     reports.find((report) => report.weekStart === weekRange.start && report.weekEnd === weekRange.end) ??
     null;
+  const completedAtByDirectiveId = await loadDirectiveCompletedAtMap(directives.map((directive) => directive.id));
   const snapshot = currentWeekReport
     ? {
         completedCount: currentWeekReport.completedCount,
@@ -271,7 +318,7 @@ export async function getReportsOverview(session: AppSession): Promise<ReportsOv
         newCount: currentWeekReport.newCount,
         totalCount: currentWeekReport.totalCount,
       }
-    : buildReportSnapshot(directives, weekRange);
+    : buildReportSnapshot(directives, weekRange, completedAtByDirectiveId);
 
   return {
     canGenerate:
@@ -319,7 +366,8 @@ export async function generateWeeklyReport(session: AppSession) {
     ...session,
     role: "CEO",
   });
-  const snapshot = buildReportSnapshot(directives, weekRange);
+  const completedAtByDirectiveId = await loadDirectiveCompletedAtMap(directives.map((directive) => directive.id));
+  const snapshot = buildReportSnapshot(directives, weekRange, completedAtByDirectiveId);
 
   const insertResult = await client
     .from("weekly_reports")

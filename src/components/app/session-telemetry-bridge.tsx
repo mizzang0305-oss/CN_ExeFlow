@@ -27,6 +27,34 @@ function resolvePageActivity(pathname: string): {
   targetId?: string;
   targetType?: string;
 } | null {
+  if (pathname === "/dashboard/ceo") {
+    return {
+      activityType: "CEO_DASHBOARD_VIEW",
+      pagePath: pathname,
+    };
+  }
+
+  if (pathname === "/board") {
+    return {
+      activityType: "DEPARTMENT_BOARD_VIEW",
+      pagePath: pathname,
+    };
+  }
+
+  if (pathname === "/workspace") {
+    return {
+      activityType: "STAFF_HOME_VIEW",
+      pagePath: pathname,
+    };
+  }
+
+  if (pathname === "/viewer") {
+    return {
+      activityType: "VIEWER_HOME_VIEW",
+      pagePath: pathname,
+    };
+  }
+
   if (pathname === "/dashboard") {
     return {
       activityType: "DASHBOARD_VIEW",

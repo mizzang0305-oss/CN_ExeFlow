@@ -13,11 +13,6 @@ export function hasCompanyEmail(email: string | null | undefined) {
   return normalized?.endsWith(COMPANY_EMAIL_DOMAIN) === true;
 }
 
-export function getDefaultAppRoute(role: UserRole) {
-  void role;
-  return "/dashboard";
-}
-
 export function isExecutiveRole(role: UserRole) {
   return executiveRoles.includes(role as (typeof executiveRoles)[number]);
 }
@@ -35,8 +30,19 @@ export function canAccessApprovalQueue(role: UserRole) {
 }
 
 export function canViewDashboard(role: UserRole) {
-  void role;
-  return true;
+  return isAdminRole(role);
+}
+
+export function canViewDepartmentBoard(role: UserRole) {
+  return role === "DEPARTMENT_HEAD";
+}
+
+export function canViewStaffHome(role: UserRole) {
+  return role === "STAFF";
+}
+
+export function canViewViewerHome(role: UserRole) {
+  return role === "VIEWER";
 }
 
 export function canViewNotificationLogPage(role: UserRole) {
@@ -47,9 +53,25 @@ export function isReadOnlyRole(role: UserRole) {
   return role === "VIEWER";
 }
 
+export function getDefaultAppRoute(role: UserRole) {
+  switch (role) {
+    case "CEO":
+    case "SUPER_ADMIN":
+      return "/dashboard/ceo";
+    case "DEPARTMENT_HEAD":
+      return "/board";
+    case "STAFF":
+      return "/workspace";
+    case "VIEWER":
+      return "/viewer";
+    default:
+      return "/dashboard/ceo";
+  }
+}
+
 export const roleLabelMap: Record<UserRole, string> = {
   CEO: "대표",
-  SUPER_ADMIN: "슈퍼관리자",
+  SUPER_ADMIN: "슈퍼 관리자",
   DEPARTMENT_HEAD: "부서장",
   STAFF: "실무 담당",
   VIEWER: "조회 전용",

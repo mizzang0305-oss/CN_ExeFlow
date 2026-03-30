@@ -1,1 +1,2 @@
-export { getDashboardData } from "@/features/directives/service";
+export * from "./service";
+export * from "./types";

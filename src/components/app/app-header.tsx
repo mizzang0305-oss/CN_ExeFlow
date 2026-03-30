@@ -35,7 +35,7 @@ export function AppHeader({
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
               <Link href={getDefaultAppRoute(session.role)} className="inline-flex items-center gap-3">
-                <span className="flex h-12 w-12 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,var(--color-brand-500),var(--color-brand-700))] text-sm font-bold tracking-[0.18em] text-white shadow-[0_18px_34px_rgba(47,130,237,0.28)]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-[999px] bg-[linear-gradient(135deg,var(--color-brand-500),var(--color-brand-700))] text-sm font-bold tracking-[0.18em] text-white shadow-[0_18px_34px_rgba(47,130,237,0.28)]">
                   CN
                 </span>
                 <div>
@@ -44,12 +44,12 @@ export function AppHeader({
                 </div>
               </Link>
 
-              <StatusPill tone="muted">대표 지시 · 부서 실행 · 승인 통제</StatusPill>
+              <StatusPill tone="muted">대표 지시 · 부서 실행 · 증빙 · 승인</StatusPill>
             </div>
 
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-100/70">
-                실행 통제 대시보드
+                Execution Control
               </p>
               <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-[2rem]">{title}</h1>
               {description ? <p className="max-w-3xl text-sm leading-7 text-white/74">{description}</p> : null}
@@ -57,8 +57,8 @@ export function AppHeader({
 
             <div className="flex flex-wrap gap-2">
               <StatusPill tone="muted">{roleLabelMap[session.role]}</StatusPill>
-              <StatusPill tone="muted">{session.departmentName ?? "미배정 부서"}</StatusPill>
-              <StatusPill tone="muted">지시 · 증빙 · 승인 · 결산 추적</StatusPill>
+              <StatusPill tone="muted">{session.departmentName ?? "미지정 부서"}</StatusPill>
+              <StatusPill tone="muted">감사 추적 활성화</StatusPill>
             </div>
           </div>
 

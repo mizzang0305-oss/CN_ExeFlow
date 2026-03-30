@@ -3,8 +3,8 @@ import { LoadingOverlay } from "@/components";
 export default function RootLoading() {
   return (
     <LoadingOverlay
-      message="CN EXEFLOW 연결 중"
-      submessage="대표 지시, 부서 실행, 승인 흐름을 순서대로 정리하고 있습니다."
+      message="실행 현황을 불러오는 중"
+      submessage="대표 지시와 부서 실행 데이터를 정리하고 있습니다."
     />
   );
 }
