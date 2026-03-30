@@ -39,6 +39,10 @@ export function canViewDashboard(role: UserRole) {
   return true;
 }
 
+export function canViewNotificationLogPage(role: UserRole) {
+  return isAdminRole(role) || role === "DEPARTMENT_HEAD";
+}
+
 export function isReadOnlyRole(role: UserRole) {
   return role === "VIEWER";
 }

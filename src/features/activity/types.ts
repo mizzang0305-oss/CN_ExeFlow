@@ -2,11 +2,7 @@ import type { JsonObject } from "@/types";
 
 import type { AppSession } from "@/features/auth/types";
 
-export type AuthActivityEventType =
-  | "LOGIN_SUCCESS"
-  | "LOGIN_FAILED"
-  | "LOGOUT"
-  | "SESSION_EXPIRED";
+export type AuthActivityEventType = "LOGIN_SUCCESS" | "LOGIN_FAILED" | "LOGOUT" | "SESSION_EXPIRED";
 
 export type AuthActivityResult = "SUCCESS" | "FAILED" | "EXPIRED";
 
@@ -19,7 +15,10 @@ export type UserActivityType =
   | "REJECTION_CLICK"
   | "APPROVAL_QUEUE_VIEW"
   | "DIRECTIVE_LOG_CREATE"
-  | "ATTACHMENT_UPLOAD";
+  | "ATTACHMENT_UPLOAD"
+  | "NOTIFICATION_INBOX_VIEW"
+  | "NOTIFICATION_PERMISSION_GRANTED"
+  | "NOTIFICATION_PERMISSION_DENIED";
 
 export type NotificationType =
   | "DIRECTIVE_ASSIGNED"
@@ -76,22 +75,6 @@ export interface UserActivityLogItem {
   userName: string | null;
 }
 
-export interface NotificationLogItem {
-  body: string;
-  channel: NotificationChannel;
-  deliveryStatus: NotificationDeliveryStatus;
-  directiveId: string | null;
-  id: string;
-  metadata: JsonObject;
-  notificationType: NotificationType;
-  readAt: string | null;
-  sentAt: string;
-  title: string;
-  clickedAt: string | null;
-  userId: string;
-  userName: string | null;
-}
-
 export interface PaginatedAuthActivityLogs {
   items: AuthActivityLogItem[];
   pagination: ActivityPaginationResult;
@@ -100,6 +83,22 @@ export interface PaginatedAuthActivityLogs {
 export interface PaginatedUserActivityLogs {
   items: UserActivityLogItem[];
   pagination: ActivityPaginationResult;
+}
+
+export interface NotificationLogItem {
+  body: string;
+  channel: NotificationChannel;
+  clickedAt: string | null;
+  deliveryStatus: NotificationDeliveryStatus;
+  directiveId: string | null;
+  id: string;
+  metadata: JsonObject;
+  notificationType: NotificationType;
+  readAt: string | null;
+  sentAt: string;
+  title: string;
+  userId: string;
+  userName: string | null;
 }
 
 export interface PaginatedNotificationLogs {

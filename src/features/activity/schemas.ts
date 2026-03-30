@@ -1,9 +1,6 @@
 import { z } from "zod";
 
-import type {
-  NotificationPermissionState,
-  UserActivityType,
-} from "./types";
+import type { UserActivityType } from "./types";
 
 const userActivityTypes: UserActivityType[] = [
   "DASHBOARD_VIEW",
@@ -15,13 +12,9 @@ const userActivityTypes: UserActivityType[] = [
   "APPROVAL_QUEUE_VIEW",
   "DIRECTIVE_LOG_CREATE",
   "ATTACHMENT_UPLOAD",
-];
-
-const notificationPermissionStates: NotificationPermissionState[] = [
-  "default",
-  "denied",
-  "granted",
-  "unsupported",
+  "NOTIFICATION_INBOX_VIEW",
+  "NOTIFICATION_PERMISSION_GRANTED",
+  "NOTIFICATION_PERMISSION_DENIED",
 ];
 
 export const activityPaginationSchema = z.object({
@@ -38,12 +31,4 @@ export const trackUserActivitySchema = z.object({
   pagePath: z.string().trim().max(240).optional(),
   targetId: z.string().trim().max(120).optional(),
   targetType: z.string().trim().max(80).optional(),
-});
-
-export const registerUserDeviceSchema = z.object({
-  deviceKey: z.string().trim().min(8).max(160),
-  deviceType: z.string().trim().min(2).max(40),
-  notificationPermission: z.enum(notificationPermissionStates),
-  platform: z.string().trim().min(2).max(40),
-  pushToken: z.string().trim().max(500).nullable().optional(),
 });

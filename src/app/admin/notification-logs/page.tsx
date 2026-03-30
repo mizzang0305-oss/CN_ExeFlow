@@ -1,14 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { AppFrame, Badge, Button, Card, EmptyState } from "@/components";
-import {
-  activityPaginationSchema,
-  listNotificationLogsForSession,
-  notificationChannelLabels,
-  notificationDeliveryStatusLabels,
-  notificationTypeLabels,
-} from "@/features/activity";
 import { requireCurrentSession } from "@/features/auth";
+import { canViewNotificationLogPage, getDefaultAppRoute } from "@/features/auth/utils";
+import {
+  listNotificationLogsForSession,
+  listNotificationUserOptionsForSession,
+  notificationChannelLabels,
+  notificationChannels,
+  notificationDeliveryStatusLabels,
+  notificationDeliveryStatuses,
+  notificationLogsQuerySchema,
+  notificationTypeLabels,
+  notificationTypes,
+} from "@/features/notifications";
 import { formatDateTimeLabel, formatRelativeUpdate } from "@/lib";
 
 export const dynamic = "force-dynamic";
@@ -21,60 +27,141 @@ function readSingleValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function resolveStatusTone(status: "PENDING" | "SENT" | "FAILED") {
+function resolveStatusTone(status: (typeof notificationDeliveryStatuses)[number]) {
   if (status === "FAILED") {
     return "danger" as const;
   }
 
-  if (status === "SENT") {
+  if (status === "READ") {
     return "success" as const;
   }
 
-  return "warning" as const;
+  if (status === "OPENED") {
+    return "default" as const;
+  }
+
+  return status === "PENDING" ? ("warning" as const) : ("muted" as const);
 }
 
 export default async function NotificationLogsPage({ searchParams }: NotificationLogsPageProps) {
   const session = await requireCurrentSession();
+
+  if (!canViewNotificationLogPage(session.role)) {
+    redirect(getDefaultAppRoute(session.role));
+  }
+
   const params = await searchParams;
-  const parsed = activityPaginationSchema.safeParse({
+  const parsed = notificationLogsQuerySchema.safeParse({
+    channel: readSingleValue(params.channel),
+    deliveryStatus: readSingleValue(params.deliveryStatus),
+    fromDate: readSingleValue(params.fromDate),
+    notificationType: readSingleValue(params.notificationType),
     page: readSingleValue(params.page),
     pageSize: 30,
     search: readSingleValue(params.search),
+    toDate: readSingleValue(params.toDate),
+    userId: readSingleValue(params.userId),
   });
-  const filters = parsed.success ? parsed.data : { page: 1, pageSize: 30, search: undefined };
-  const result = await listNotificationLogsForSession(session, filters);
+  const filters = parsed.success
+    ? parsed.data
+    : {
+        page: 1,
+        pageSize: 30,
+      };
+
+  const [result, userOptions] = await Promise.all([
+    listNotificationLogsForSession(session, filters),
+    listNotificationUserOptionsForSession(session),
+  ]);
+
+  const keepParams = new URLSearchParams();
+  if (filters.search) keepParams.set("search", filters.search);
+  if (filters.userId) keepParams.set("userId", filters.userId);
+  if (filters.notificationType) keepParams.set("notificationType", filters.notificationType);
+  if (filters.channel) keepParams.set("channel", filters.channel);
+  if (filters.deliveryStatus) keepParams.set("deliveryStatus", filters.deliveryStatus);
+  if (filters.fromDate) keepParams.set("fromDate", filters.fromDate);
+  if (filters.toDate) keepParams.set("toDate", filters.toDate);
 
   return (
     <AppFrame
       currentPath="/admin/notification-logs"
       session={session}
       title="알림 로그"
-      description="지시 배정, 완료 요청, 승인 요청, 승인 완료, 반려, 지연 발생 알림의 발송 이력을 확인합니다."
+      description="지시 배정, 완료 요청, 승인 필요, 반려, 승인 완료 알림의 운영 이력을 검증합니다."
     >
       <div className="space-y-6">
         <Card className="space-y-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2">
-                <Badge tone="default">{`총 ${result.pagination.total}건`}</Badge>
-                <Badge tone="muted">푸시 발송 이력</Badge>
+                <Badge tone="default">{`전체 ${result.pagination.total}건`}</Badge>
+                <Badge tone="muted">감사 및 운영 데이터</Badge>
               </div>
               <p className="text-sm text-ink-700">
-                의미 있는 알림만 기록해 경영 판단과 실행 통제 흐름을 추적합니다.
+                삭제 없이 누가 어떤 알림을 받고, 읽고, 클릭했는지 추적합니다.
               </p>
             </div>
 
-            <form className="flex flex-wrap gap-2">
+            <form className="grid gap-3 lg:grid-cols-6">
               <input
                 type="search"
                 name="search"
                 defaultValue={filters.search}
-                placeholder="제목 또는 알림 유형 검색"
-                className="field min-w-[240px]"
+                placeholder="제목 또는 본문 검색"
+                className="field lg:col-span-2"
               />
-              <Button type="submit" size="md">
-                적용
-              </Button>
+
+              <select name="userId" defaultValue={filters.userId ?? ""} className="field">
+                <option value="">전체 사용자</option>
+                {userOptions.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+
+              <select name="notificationType" defaultValue={filters.notificationType ?? ""} className="field">
+                <option value="">전체 유형</option>
+                {notificationTypes.map((notificationType) => (
+                  <option key={notificationType} value={notificationType}>
+                    {notificationTypeLabels[notificationType]}
+                  </option>
+                ))}
+              </select>
+
+              <select name="channel" defaultValue={filters.channel ?? ""} className="field">
+                <option value="">전체 채널</option>
+                {notificationChannels.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {notificationChannelLabels[channel]}
+                  </option>
+                ))}
+              </select>
+
+              <select name="deliveryStatus" defaultValue={filters.deliveryStatus ?? ""} className="field">
+                <option value="">전체 상태</option>
+                {notificationDeliveryStatuses.map((deliveryStatus) => (
+                  <option key={deliveryStatus} value={deliveryStatus}>
+                    {notificationDeliveryStatusLabels[deliveryStatus]}
+                  </option>
+                ))}
+              </select>
+
+              <input type="date" name="fromDate" defaultValue={filters.fromDate ?? ""} className="field" />
+              <input type="date" name="toDate" defaultValue={filters.toDate ?? ""} className="field" />
+
+              <div className="flex gap-2 lg:col-span-2">
+                <Button type="submit" size="md">
+                  필터 적용
+                </Button>
+                <Link
+                  href="/admin/notification-logs"
+                  className="inline-flex h-11 items-center justify-center rounded-[20px] border border-brand-100/80 bg-brand-50/85 px-4 text-sm font-semibold text-brand-900 shadow-[0_12px_28px_rgba(7,32,63,0.08)]"
+                >
+                  초기화
+                </Link>
+              </div>
             </form>
           </div>
         </Card>
@@ -82,7 +169,7 @@ export default async function NotificationLogsPage({ searchParams }: Notificatio
         {result.items.length === 0 ? (
           <EmptyState
             title="표시할 알림 로그가 없습니다"
-            description="현재 권한 범위에서 조회되는 알림 로그가 없습니다."
+            description="현재 권한 범위와 필터 조건에 맞는 알림 로그가 없습니다."
           />
         ) : (
           <div className="grid gap-4">
@@ -94,7 +181,8 @@ export default async function NotificationLogsPage({ searchParams }: Notificatio
                   <Badge tone={resolveStatusTone(item.deliveryStatus)}>
                     {notificationDeliveryStatusLabels[item.deliveryStatus]}
                   </Badge>
-                  {item.directiveId ? <Badge tone="muted">{`지시 ${item.directiveId}`}</Badge> : null}
+                  {item.userName ? <Badge tone="muted">{item.userName}</Badge> : null}
+                  {item.directiveNo ? <Badge tone="muted">{item.directiveNo}</Badge> : null}
                 </div>
 
                 <div className="space-y-2">
@@ -104,31 +192,39 @@ export default async function NotificationLogsPage({ searchParams }: Notificatio
 
                 <div className="grid gap-3 lg:grid-cols-4">
                   <div>
-                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">수신자</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-950">{item.userName ?? item.userId}</p>
+                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">생성 시간</p>
+                    <p className="mt-2 text-sm font-semibold text-ink-950">{formatDateTimeLabel(item.createdAt)}</p>
+                    <p className="mt-1 text-xs text-ink-600">{formatRelativeUpdate(item.createdAt)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">발송 시각</p>
-                    <p className="mt-2 text-sm font-semibold text-ink-950">{formatDateTimeLabel(item.sentAt)}</p>
-                    <p className="mt-1 text-xs text-ink-600">{formatRelativeUpdate(item.sentAt)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">열람 시각</p>
-                    <p className="mt-2 text-sm text-ink-700">
-                      {item.readAt ? formatDateTimeLabel(item.readAt) : "미열람"}
+                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">읽음 여부</p>
+                    <p className="mt-2 text-sm text-ink-700">{item.readAt ? "읽음" : "미읽음"}</p>
+                    <p className="mt-1 text-xs text-ink-600">
+                      {item.readAt ? formatDateTimeLabel(item.readAt) : "기록 없음"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">클릭 시각</p>
-                    <p className="mt-2 text-sm text-ink-700">
-                      {item.clickedAt ? formatDateTimeLabel(item.clickedAt) : "미클릭"}
+                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">클릭 여부</p>
+                    <p className="mt-2 text-sm text-ink-700">{item.clickedAt ? "클릭됨" : "미클릭"}</p>
+                    <p className="mt-1 text-xs text-ink-600">
+                      {item.clickedAt ? formatDateTimeLabel(item.clickedAt) : "기록 없음"}
                     </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">관련 지시사항</p>
+                    {item.directiveId ? (
+                      <Link href={`/directives/${item.directiveId}`} className="mt-2 inline-flex text-sm font-semibold text-brand-700">
+                        {item.directiveTitle ?? item.directiveNo ?? item.directiveId}
+                      </Link>
+                    ) : (
+                      <p className="mt-2 text-sm text-ink-700">연결 없음</p>
+                    )}
                   </div>
                 </div>
 
-                {Object.keys(item.metadata).length > 0 ? (
+                {Object.keys(item.payload).length > 0 ? (
                   <div className="rounded-2xl border border-ink-200/70 bg-white px-4 py-3 text-xs leading-6 text-ink-600">
-                    {JSON.stringify(item.metadata)}
+                    {JSON.stringify(item.payload)}
                   </div>
                 ) : null}
               </Card>
@@ -144,7 +240,7 @@ export default async function NotificationLogsPage({ searchParams }: Notificatio
             <div className="flex items-center gap-2">
               {result.pagination.page > 1 ? (
                 <Link
-                  href={`/admin/notification-logs?page=${result.pagination.page - 1}${filters.search ? `&search=${encodeURIComponent(filters.search)}` : ""}`}
+                  href={`/admin/notification-logs?page=${result.pagination.page - 1}${keepParams.toString() ? `&${keepParams.toString()}` : ""}`}
                   className="rounded-full bg-ink-100 px-4 py-2 text-sm font-semibold text-ink-700"
                 >
                   이전
@@ -152,7 +248,7 @@ export default async function NotificationLogsPage({ searchParams }: Notificatio
               ) : null}
               {result.pagination.page < result.pagination.totalPages ? (
                 <Link
-                  href={`/admin/notification-logs?page=${result.pagination.page + 1}${filters.search ? `&search=${encodeURIComponent(filters.search)}` : ""}`}
+                  href={`/admin/notification-logs?page=${result.pagination.page + 1}${keepParams.toString() ? `&${keepParams.toString()}` : ""}`}
                   className="rounded-full bg-ink-950 px-4 py-2 text-sm font-semibold text-white"
                 >
                   다음
