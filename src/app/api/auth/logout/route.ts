@@ -4,6 +4,8 @@ import { createApiSuccessResponse, handleApiError } from "@/lib/api";
 import { runBackgroundTask } from "@/lib/background-task";
 import { readRequestClientContext } from "@/lib/request-context";
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   try {
     const session = await getCurrentSession();

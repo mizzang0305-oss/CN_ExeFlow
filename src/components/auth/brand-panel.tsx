@@ -1,17 +1,32 @@
 import { StatusPill } from "@/components/ui/status-pill";
 
 const executionSteps = [
-  { title: "대표 지시", description: "우선순위를 정하고 실행 기준을 배포합니다." },
-  { title: "현장 실행", description: "부서별 조치와 담당자 실행이 빠르게 이어집니다." },
-  { title: "증빙 수집", description: "사진, 문서, 행동 로그를 하나의 흐름으로 모읍니다." },
-  { title: "승인 판단", description: "대표와 부서장이 승인 대기와 리스크를 바로 확인합니다." },
-  { title: "주간 결산", description: "주간 보고 성과와 지연 신호를 누적해 경영 판단 데이터로 바꿉니다." },
+  {
+    title: "지시 등록",
+    description: "대표 지시와 핵심 과제를 하나의 기준 화면에서 정리합니다.",
+  },
+  {
+    title: "부서 실행",
+    description: "부서별 담당자와 실행 상태가 즉시 연결됩니다.",
+  },
+  {
+    title: "증빙 수집",
+    description: "사진, 문서, 실행 로그를 같은 흐름에서 남길 수 있습니다.",
+  },
+  {
+    title: "승인 관리",
+    description: "완료 요청과 승인 대기를 관리자 화면에서 바로 확인합니다.",
+  },
+  {
+    title: "주간 집계",
+    description: "누적된 실행 데이터를 주간 보고와 경영 지표로 연결합니다.",
+  },
 ] as const;
 
 const motifBars = [
   { label: "실행 배정", height: "58%" },
-  { label: "증빙 정보", height: "72%" },
-  { label: "승인 가시화", height: "88%" },
+  { label: "증빙 연결", height: "74%" },
+  { label: "승인 추적", height: "88%" },
 ] as const;
 
 export function BrandPanel() {
@@ -29,37 +44,43 @@ export function BrandPanel() {
               CN
             </span>
             <div>
-              <p className="text-sm font-semibold tracking-[0.24em] text-brand-100">씨엔푸드</p>
+              <p className="text-sm font-semibold tracking-[0.24em] text-brand-100">CN EXEFLOW</p>
               <p className="text-xs text-white/62">실행 통제 플랫폼</p>
             </div>
-            <StatusPill tone="muted">경영 판단 데이터 중심 운영</StatusPill>
+            <StatusPill tone="muted">회사 이메일 기반 보안 로그인</StatusPill>
           </div>
 
           <div className="space-y-4">
             <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-[3.2rem] sm:leading-[1.08]">
-              대표, 통제, 실행력이 한 화면에서 이어지는 CN FOOD 운영 허브
+              지시부터 실행, 승인, 집계까지 한 흐름으로 연결하는 CN EXEFLOW
             </h1>
             <p className="max-w-2xl text-base leading-8 text-white/74">
-              CN EXEFLOW는 단순 조회 화면이 아니라 대표 지시부터 현장 증빙, 승인 판단, 주간 결산까지 실행 데이터를
-              누적하는 조직 실행 통제 시스템입니다.
+              CN EXEFLOW는 대표 지시를 등록하고, 부서 실행과 증빙, 승인 대기, 주간 집계까지
+              하나의 흐름으로 연결하는 실행 관리 시스템입니다.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">통제 흐름</p>
-              <p className="mt-3 text-2xl font-semibold text-white">5단계</p>
-              <p className="mt-2 text-sm leading-6 text-white/68">대표 지시부터 결산까지 같은 화면 흐름으로 통제합니다.</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">기준 데이터</p>
+              <p className="mt-3 text-2xl font-semibold text-white">조직 마스터</p>
+              <p className="mt-2 text-sm leading-6 text-white/68">
+                이름, 부서, 역할은 관리자 기준정보와 연결되어 최초 설정 시 그대로 확인됩니다.
+              </p>
             </div>
             <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">증빙 연결</p>
-              <p className="mt-3 text-2xl font-semibold text-white">실시간 연계</p>
-              <p className="mt-2 text-sm leading-6 text-white/68">부서별 실행 로그와 증빙을 승인 흐름으로 바로 연결합니다.</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">인증 전환</p>
+              <p className="mt-3 text-2xl font-semibold text-white">이메일 로그인</p>
+              <p className="mt-2 text-sm leading-6 text-white/68">
+                최초 설정은 부서와 이름으로 본인을 확인하고, 이후에는 회사 이메일과 비밀번호로 로그인합니다.
+              </p>
             </div>
             <div className="rounded-[28px] border border-white/12 bg-white/8 p-4 backdrop-blur-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">결산 축적</p>
-              <p className="mt-3 text-2xl font-semibold text-white">주간 보고</p>
-              <p className="mt-2 text-sm leading-6 text-white/68">운영 기록을 다음 판단으로 이어지는 결산 데이터로 만듭니다.</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">감사 추적</p>
+              <p className="mt-3 text-2xl font-semibold text-white">접속 로그</p>
+              <p className="mt-2 text-sm leading-6 text-white/68">
+                로그인 성공과 실패, 비밀번호 재설정, 사용자 활동 로그를 운영 기준에 맞게 남깁니다.
+              </p>
             </div>
           </div>
         </div>
@@ -89,9 +110,9 @@ export function BrandPanel() {
             <div className="brand-dots absolute inset-0 opacity-20" />
             <div className="relative flex h-full flex-col justify-between gap-6">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-100/70">운영 시선</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-100/70">운영 시야</p>
                 <p className="mt-3 text-sm leading-7 text-white/68">
-                  물류, 현장, 본사 판단이 하나의 축으로 이어지도록 운영 시선을 구성했습니다.
+                  로그인 직후 필요한 실행 현황을 바로 볼 수 있도록 핵심 흐름을 한 화면에 모아두었습니다.
                 </p>
               </div>
 
@@ -116,9 +137,9 @@ export function BrandPanel() {
                 </div>
 
                 <div className="rounded-[24px] border border-white/8 bg-white/6 px-4 py-4">
-                  <p className="text-sm font-semibold text-white">대표 지시에서 실행과 증빙, 승인, 결산까지</p>
+                  <p className="text-sm font-semibold text-white">최초 설정 후에는 이메일 로그인으로 전환됩니다.</p>
                   <p className="mt-2 text-sm leading-6 text-white/62">
-                    로그인 이후 모든 화면이 같은 흐름 기준으로 정렬되도록 설계했습니다.
+                    부서와 이름은 관리자 기준정보로 관리되고, 사용자는 회사 이메일과 비밀번호만 설정하면 바로 업무 흐름에 진입할 수 있습니다.
                   </p>
                 </div>
               </div>

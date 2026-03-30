@@ -24,6 +24,7 @@ export interface AuthenticatedUserProfile {
   departmentName: string | null;
   displayName: string;
   email: string | null;
+  hasCompanyEmail: boolean;
   isActivated: boolean;
   name: string;
   profileName: string | null;
@@ -43,6 +44,7 @@ export interface SessionCreateResult {
 }
 
 export interface AuthLoginResult extends SessionCreateResult {
+  message: string;
   rememberMe: boolean;
 }
 
@@ -68,6 +70,7 @@ export interface LoginUserOption {
 
 export interface LoginBootstrapData {
   departments: LoginDepartmentOption[];
+  users: LoginUserOption[];
 }
 
 export interface LoginUsersData {
@@ -75,8 +78,9 @@ export interface LoginUsersData {
   users: LoginUserOption[];
 }
 
-export interface ActivationLookupData {
-  canActivate: boolean;
+export interface InitialSetupLookupData {
+  canRegisterCompanyEmail: boolean;
+  existingEmail: string | null;
   profile: AuthenticatedUserProfile | null;
 }
 
@@ -86,10 +90,33 @@ export interface LoginRequestInput {
   rememberMe: boolean;
 }
 
-export interface ActivateAccountInput {
+export interface InitialSetupLookupInput {
+  departmentId: string;
+  name: string;
+  userId?: string | null;
+}
+
+export interface RegisterCompanyEmailInput {
   email: string;
+  userId: string;
+}
+
+export interface RegisterCompanyEmailResult {
+  email: string;
+  message: string;
+}
+
+export interface ActivateAccountInput {
   password: string;
-  rememberMe: boolean;
+  passwordConfirm: string;
+  userId: string;
+}
+
+export interface ActivateAccountResult {
+  completed: true;
+  email: string;
+  message: string;
+  redirectTo: string;
 }
 
 export interface PasswordResetRequestInput {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CN EXEFLOW",
-  description: "CN FOOD 대표 지시 실행 통제 시스템",
+  description: "CN FOOD 실행 지시와 부서 운영을 관리하는 실행 통제 시스템",
 };
 
 export default function RootLayout({

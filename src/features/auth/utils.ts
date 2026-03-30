@@ -1,20 +1,21 @@
 import { executiveRoles } from "./constants";
 import type { UserRole } from "./types";
 
+export const COMPANY_EMAIL_DOMAIN = "@seanfood.com";
+
+export function normalizeEmailAddress(email: string | null | undefined) {
+  const normalized = email?.trim().toLowerCase() ?? "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function hasCompanyEmail(email: string | null | undefined) {
+  const normalized = normalizeEmailAddress(email);
+  return normalized?.endsWith(COMPANY_EMAIL_DOMAIN) === true;
+}
+
 export function getDefaultAppRoute(role: UserRole) {
-  if (role === "DEPARTMENT_HEAD") {
-    return "/board";
-  }
-
-  if (role === "STAFF") {
-    return "/directives";
-  }
-
-  if (role === "VIEWER") {
-    return "/dashboard";
-  }
-
-  return executiveRoles.includes(role as (typeof executiveRoles)[number]) ? "/dashboard" : "/directives";
+  void role;
+  return "/dashboard";
 }
 
 export function isExecutiveRole(role: UserRole) {
@@ -34,7 +35,8 @@ export function canAccessApprovalQueue(role: UserRole) {
 }
 
 export function canViewDashboard(role: UserRole) {
-  return isExecutiveRole(role) || role === "VIEWER";
+  void role;
+  return true;
 }
 
 export function isReadOnlyRole(role: UserRole) {

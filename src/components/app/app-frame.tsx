@@ -16,39 +16,41 @@ type AppFrameProps = {
 function getNavigationItems(session: AppSession): NavigationItem[] {
   if (isAdminRole(session.role)) {
     return [
-      { href: "/dashboard", label: "대표 대시보드" },
+      { href: "/dashboard", label: "대시보드" },
       { href: "/directives", label: "지시 관리" },
-      { href: "/directives/approval-queue", label: "승인 대기 큐" },
-      { href: "/reports", label: "주간 결산" },
+      { href: "/directives/approval-queue", label: "승인 대기" },
+      { href: "/reports", label: "주간 집계" },
       { href: "/admin/auth-logs", label: "접속 로그" },
       { href: "/admin/activity-logs", label: "활동 로그" },
       { href: "/admin/notification-logs", label: "알림 로그" },
-      { href: "/admin/master/departments", label: "조직 운영 도구" },
+      { href: "/admin/master/departments", label: "조직 기준정보" },
     ];
   }
 
   if (session.role === "DEPARTMENT_HEAD") {
     return [
+      { href: "/dashboard", label: "대시보드" },
       { href: "/board", label: "부서 실행보드" },
       { href: "/directives", label: "지시 관리" },
-      { href: "/reports", label: "주간 결산" },
+      { href: "/reports", label: "주간 집계" },
     ];
   }
 
   if (session.role === "VIEWER") {
     return [
-      { href: "/dashboard", label: "조회 대시보드" },
-      { href: "/reports", label: "주간 결산" },
+      { href: "/dashboard", label: "대시보드" },
+      { href: "/reports", label: "주간 집계" },
     ];
   }
 
   const baseItems: NavigationItem[] = [
+    { href: "/dashboard", label: "대시보드" },
     { href: "/directives", label: "실행 현황" },
-    { href: "/reports", label: "주간 결산" },
+    { href: "/reports", label: "주간 집계" },
   ];
 
   if (canAccessApprovalQueue(session.role)) {
-    return [...baseItems, { href: "/directives/approval-queue", label: "승인 대기 큐" }];
+    return [...baseItems, { href: "/directives/approval-queue", label: "승인 대기" }];
   }
 
   return baseItems;

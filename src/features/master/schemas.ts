@@ -40,7 +40,13 @@ export const departmentReorderSchema = z
 export const userUpsertSchema = z
   .object({
     departmentId: nullableUuidSchema,
-    email: z.string().trim().email(),
+    email: z
+      .string()
+      .trim()
+      .email("올바른 이메일 형식을 입력해주세요.")
+      .nullable()
+      .optional()
+      .or(z.literal("")),
     isActive: z.boolean().default(true),
     name: z.string().trim().min(2).max(80),
     profileName: z.string().trim().max(80).nullable().optional(),
@@ -50,6 +56,7 @@ export const userUpsertSchema = z
   .transform((value) => ({
     ...value,
     departmentId: value.departmentId ?? null,
+    email: typeof value.email === "string" ? value.email.trim() || null : null,
     profileName: value.profileName ?? null,
     title: value.title ?? null,
   }));
