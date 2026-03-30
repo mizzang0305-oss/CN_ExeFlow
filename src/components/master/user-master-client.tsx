@@ -101,7 +101,7 @@ export function UserMasterClient({
         <div className="space-y-2">
           <CardTitle>{editingId ? "사용자 수정" : "사용자 추가"}</CardTitle>
           <CardDescription>
-            로그인 표시명, 부서 배정, 역할, 활성 상태를 한 화면에서 관리합니다.
+            이름, 부서, 역할, 활성 상태는 관리자만 관리합니다. 이메일은 비워두면 사용자가 최초 사용자 설정에서 회사 이메일을 직접 등록할 수 있습니다.
           </CardDescription>
         </div>
 
@@ -123,12 +123,15 @@ export function UserMasterClient({
             />
           </FieldGroup>
           <FieldGroup>
-            <FieldLabel label="이메일" required />
+            <FieldLabel
+              label="이메일"
+              hint="선택 입력입니다. 비워두면 최초 사용자 설정에서 회사 이메일을 등록합니다."
+            />
             <Input
               type="email"
               value={form.email}
               onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              placeholder="name@cnfood.co.kr"
+              placeholder="name@seanfood.com"
             />
           </FieldGroup>
           <FieldGroup>
@@ -224,7 +227,7 @@ export function UserMasterClient({
                     {user.departmentName ?? "미배정"} · {roleLabelMap[user.role]}
                   </p>
                   <p className="mt-2 text-xs text-ink-500">
-                    {user.email ?? "이메일 없음"}
+                    {user.email ?? "회사 이메일 미등록"}
                     {user.title ? ` · ${user.title}` : ""}
                   </p>
                 </div>

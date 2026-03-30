@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { trackAuthActivity } from "@/features/activity/service";
 import { runBackgroundTask } from "@/lib/background-task";
 import { ApiError } from "@/lib/errors";
+import { recordHistory } from "@/lib/history";
 import { readRequestClientContext } from "@/lib/request-context";
 import {
   createSupabaseAuthServerClient,
@@ -19,26 +20,40 @@ import {
 } from "./constants";
 import type {
   ActivateAccountInput,
-  ActivationLookupData,
+  ActivateAccountResult,
   AppSession,
   AuthLoginResult,
   AuthLookupResult,
   AuthenticatedUserProfile,
+  InitialSetupLookupData,
+  InitialSetupLookupInput,
+  LoginBootstrapData,
+  LoginDepartmentOption,
   LoginRequestInput,
+  LoginUserOption,
+  LoginUsersData,
   PasswordResetRequestInput,
+  RegisterCompanyEmailInput,
+  RegisterCompanyEmailResult,
   UserRole,
 } from "./types";
 import {
+  COMPANY_EMAIL_DOMAIN,
   canViewDashboard,
   getDefaultAppRoute,
+  hasCompanyEmail,
   isAdminRole,
   isExecutiveRole,
+  normalizeEmailAddress,
 } from "./utils";
 
 type DepartmentRow = {
   code: string;
+  head_user_id: string | null;
   id: string;
+  is_active?: boolean;
   name: string;
+  sort_order?: number | null;
 };
 
 type UserRow = {
@@ -53,6 +68,7 @@ type UserRow = {
   profile_name: string | null;
   role: UserRole;
   title: string | null;
+  updated_at?: string | null;
 };
 
 type SessionCookiePayload = {
@@ -130,12 +146,12 @@ async function getDepartmentRecord(departmentId: string | null) {
   const client = createSupabaseServerClient();
   const departmentQuery = await client
     .from("departments")
-    .select("id, code, name")
+    .select("id, code, name, head_user_id")
     .eq("id", departmentId)
     .maybeSingle<DepartmentRow>();
 
   if (departmentQuery.error) {
-    throw new ApiError(500, "부서 정보를 확인하지 못했습니다.", departmentQuery.error, "SESSION_DEPARTMENT_LOAD_FAILED");
+    throw new ApiError(500, "부서 정보를 불러오지 못했습니다.", departmentQuery.error, "SESSION_DEPARTMENT_LOAD_FAILED");
   }
 
   return departmentQuery.data ?? null;
@@ -147,7 +163,7 @@ function buildSession(user: UserRow, department: DepartmentRow | null): AppSessi
     departmentId: user.department_id,
     departmentName: department?.name ?? null,
     displayName: buildDisplayName(user),
-    email: user.email,
+    email: normalizeEmailAddress(user.email),
     name: user.name,
     profileName: user.profile_name,
     role: user.role,
@@ -162,7 +178,8 @@ function buildAuthenticatedProfile(user: UserRow, department: DepartmentRow | nu
     departmentId: user.department_id,
     departmentName: department?.name ?? null,
     displayName: buildDisplayName(user),
-    email: user.email,
+    email: normalizeEmailAddress(user.email),
+    hasCompanyEmail: hasCompanyEmail(user.email),
     isActivated: Boolean(user.auth_user_id),
     name: user.name,
     profileName: user.profile_name,
@@ -172,24 +189,55 @@ function buildAuthenticatedProfile(user: UserRow, department: DepartmentRow | nu
   };
 }
 
-async function findUserByEmail(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-  const client = createSupabaseServerClient();
-  const { data, error } = await client
-    .from("users")
-    .select("id, name, profile_name, role, department_id, title, email, is_active, auth_user_id, last_login_at, last_active_at")
-    .ilike("email", normalizedEmail);
+async function readRequestContextFromHeaders() {
+  const headerStore = await headers();
+  return readRequestClientContext(new Headers(headerStore));
+}
 
-  if (error) {
-    throw new ApiError(500, "사용자 정보를 확인하지 못했습니다.", error, "AUTH_USER_EMAIL_LOOKUP_FAILED");
+function buildAuthUserErrorMessage(error: unknown, fallbackMessage: string, code: string) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+  if (message.includes("already") && (message.includes("registered") || message.includes("exists"))) {
+    return new ApiError(409, "이미 사용 중인 이메일입니다.", error, code);
   }
 
-  const users = (data ?? []) as UserRow[];
+  return new ApiError(500, fallbackMessage, error, code);
+}
+
+async function findUsersByNormalizedEmail(normalizedEmail: string, excludeUserId?: string) {
+  const client = createSupabaseServerClient();
+  const domain = normalizedEmail.slice(normalizedEmail.indexOf("@"));
+  let query = client
+    .from("users")
+    .select(
+      "id, name, profile_name, role, department_id, title, email, is_active, auth_user_id, last_login_at, last_active_at, updated_at",
+    )
+    .not("email", "is", null);
+
+  if (domain) {
+    query = query.ilike("email", `%${domain}%`);
+  }
+
+  if (excludeUserId) {
+    query = query.neq("id", excludeUserId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new ApiError(500, "이메일 정보를 확인하지 못했습니다.", error, "AUTH_EMAIL_LOOKUP_FAILED");
+  }
+
+  return ((data ?? []) as UserRow[]).filter((user) => normalizeEmailAddress(user.email) === normalizedEmail);
+}
+
+async function findUserByNormalizedEmail(normalizedEmail: string) {
+  const users = await findUsersByNormalizedEmail(normalizedEmail);
 
   if (users.length > 1) {
     throw new ApiError(
       409,
-      "같은 이메일이 여러 사용자에 연결되어 있습니다. 관리자에게 문의해주세요.",
+      "이미 사용 중인 이메일입니다.",
       null,
       "AUTH_USER_EMAIL_DUPLICATED",
     );
@@ -198,11 +246,69 @@ async function findUserByEmail(email: string) {
   return users[0] ?? null;
 }
 
+async function findUserById(userId: string) {
+  const client = createSupabaseServerClient();
+  const userQuery = await client
+    .from("users")
+    .select(
+      "id, name, profile_name, role, department_id, title, email, is_active, auth_user_id, last_login_at, last_active_at, updated_at",
+    )
+    .eq("id", userId)
+    .maybeSingle<UserRow>();
+
+  if (userQuery.error) {
+    throw new ApiError(500, "사용자 정보를 확인하지 못했습니다.", userQuery.error, "AUTH_USER_LOOKUP_FAILED");
+  }
+
+  return userQuery.data ?? null;
+}
+
+async function findUserByDepartmentAndName(input: InitialSetupLookupInput) {
+  const client = createSupabaseServerClient();
+  let query = client
+    .from("users")
+    .select(
+      "id, name, profile_name, role, department_id, title, email, is_active, auth_user_id, last_login_at, last_active_at, updated_at",
+    )
+    .eq("department_id", input.departmentId)
+    .eq("name", input.name.trim())
+    .eq("is_active", true);
+
+  if (input.userId) {
+    query = query.eq("id", input.userId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new ApiError(500, "선택한 부서와 이름을 확인하지 못했습니다.", error, "AUTH_SETUP_USER_LOOKUP_FAILED");
+  }
+
+  const users = (data ?? []) as UserRow[];
+
+  if (users.length === 0) {
+    return null;
+  }
+
+  if (users.length > 1) {
+    throw new ApiError(
+      409,
+      "같은 부서에 동일한 이름의 사용자가 여러 명 있습니다. 관리자에게 문의해주세요.",
+      null,
+      "AUTH_SETUP_USER_DUPLICATED",
+    );
+  }
+
+  return users[0];
+}
+
 async function findUserByAuthUserId(authUserId: string) {
   const client = createSupabaseServerClient();
   const userQuery = await client
     .from("users")
-    .select("id, name, profile_name, role, department_id, title, email, is_active, auth_user_id, last_login_at, last_active_at")
+    .select(
+      "id, name, profile_name, role, department_id, title, email, is_active, auth_user_id, last_login_at, last_active_at, updated_at",
+    )
     .eq("auth_user_id", authUserId)
     .eq("is_active", true)
     .maybeSingle<UserRow>();
@@ -228,8 +334,6 @@ async function updateUserLoginTimestamps(userId: string) {
   if (error) {
     throw new ApiError(500, "로그인 시각을 저장하지 못했습니다.", error, "AUTH_LOGIN_TIMESTAMP_UPDATE_FAILED");
   }
-
-  return now;
 }
 
 async function authenticateWithSupabase(email: string, password: string) {
@@ -246,19 +350,56 @@ async function authenticateWithSupabase(email: string, password: string) {
   return data.user;
 }
 
-async function createAuthUser(email: string, password: string) {
+async function ensureCompanyEmailAvailable(normalizedEmail: string, excludeUserId?: string) {
+  const matches = await findUsersByNormalizedEmail(normalizedEmail, excludeUserId);
+
+  if (matches.length > 0) {
+    throw new ApiError(409, "이미 사용 중인 이메일입니다.", null, "AUTH_EMAIL_DUPLICATED");
+  }
+}
+
+async function upsertAuthUser(user: UserRow, email: string, password: string) {
   const client = createSupabaseServerClient();
-  const { data, error } = await client.auth.admin.createUser({
+
+  if (user.auth_user_id) {
+    const updateQuery = await client.auth.admin.updateUserById(user.auth_user_id, {
+      email,
+      email_confirm: true,
+      password,
+    });
+
+    if (!updateQuery.error && updateQuery.data.user) {
+      return updateQuery.data.user;
+    }
+
+    const shouldRecover =
+      updateQuery.error instanceof Error &&
+      updateQuery.error.message.toLowerCase().includes("not found");
+
+    if (!shouldRecover) {
+      throw buildAuthUserErrorMessage(
+        updateQuery.error,
+        "비밀번호 설정을 완료하지 못했습니다.",
+        "AUTH_USER_UPDATE_FAILED",
+      );
+    }
+  }
+
+  const createQuery = await client.auth.admin.createUser({
     email,
     email_confirm: true,
     password,
   });
 
-  if (error || !data.user) {
-    throw new ApiError(500, "최초 사용자 활성화를 완료하지 못했습니다.", error, "AUTH_ACCOUNT_CREATE_FAILED");
+  if (createQuery.error || !createQuery.data.user) {
+    throw buildAuthUserErrorMessage(
+      createQuery.error,
+      "비밀번호 설정을 완료하지 못했습니다.",
+      "AUTH_ACCOUNT_CREATE_FAILED",
+    );
   }
 
-  return data.user;
+  return createQuery.data.user;
 }
 
 async function linkAuthUserToPublicUser(userId: string, authUserId: string) {
@@ -268,11 +409,12 @@ async function linkAuthUserToPublicUser(userId: string, authUserId: string) {
     .update({
       auth_user_id: authUserId,
       last_active_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", userId);
 
   if (error) {
-    throw new ApiError(500, "조직 사용자와 인증 계정을 연결하지 못했습니다.", error, "AUTH_USER_LINK_FAILED");
+    throw new ApiError(500, "인증 계정 연결을 저장하지 못했습니다.", error, "AUTH_USER_LINK_FAILED");
   }
 }
 
@@ -291,7 +433,7 @@ async function buildLoginResult(user: UserRow, rememberMe: boolean): Promise<Aut
 
   await setAppSessionCookie({
     authUserId: user.auth_user_id,
-    email: user.email,
+    email: session.email,
     expiresAt: expiresAt.toISOString(),
     issuedAt: issuedAt.toISOString(),
     rememberMe,
@@ -299,49 +441,255 @@ async function buildLoginResult(user: UserRow, rememberMe: boolean): Promise<Aut
   });
 
   return {
+    message: "로그인되었습니다.",
     redirectTo: getDefaultAppRoute(user.role),
     rememberMe,
     session,
   };
 }
 
-async function readRequestContextFromHeaders() {
-  const headerStore = await headers();
-  return readRequestClientContext(new Headers(headerStore));
+async function loadSetupRows() {
+  const client = createSupabaseServerClient();
+  const [departmentsQuery, usersQuery] = await Promise.all([
+    client
+      .from("departments")
+      .select("id, code, name, head_user_id, is_active, sort_order")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("name", { ascending: true }),
+    client
+      .from("users")
+      .select("id, name, profile_name, role, department_id, title, is_active")
+      .eq("is_active", true)
+      .not("department_id", "is", null)
+      .order("name", { ascending: true })
+      .order("profile_name", { ascending: true, nullsFirst: false }),
+  ]);
+
+  if (departmentsQuery.error) {
+    throw new ApiError(
+      500,
+      "최초 사용자 설정용 부서 목록을 불러오지 못했습니다.",
+      departmentsQuery.error,
+      "AUTH_SETUP_DEPARTMENTS_LOAD_FAILED",
+    );
+  }
+
+  if (usersQuery.error) {
+    throw new ApiError(
+      500,
+      "최초 사용자 설정용 사용자 목록을 불러오지 못했습니다.",
+      usersQuery.error,
+      "AUTH_SETUP_USERS_LOAD_FAILED",
+    );
+  }
+
+  return {
+    departments: (departmentsQuery.data ?? []) as DepartmentRow[],
+    users: (usersQuery.data ?? []) as Array<
+      Pick<UserRow, "department_id" | "id" | "name" | "profile_name" | "role" | "title">
+    >,
+  };
 }
 
-export async function lookupUserForActivation(email: string): Promise<ActivationLookupData> {
-  const user = await findUserByEmail(email);
+export async function getInitialSetupBootstrapData(): Promise<LoginBootstrapData> {
+  const { departments, users } = await loadSetupRows();
+  const activeDepartmentMap = new Map(departments.map((department) => [department.id, department]));
+  const usersInActiveDepartments = users.filter(
+    (user) => user.department_id && activeDepartmentMap.has(user.department_id),
+  );
+  const usersByDepartment = new Map<string, typeof usersInActiveDepartments>();
+  const userNameById = new Map(
+    usersInActiveDepartments.map((user) => [user.id, user.profile_name?.trim() || user.name]),
+  );
+
+  for (const user of usersInActiveDepartments) {
+    const bucket = usersByDepartment.get(user.department_id as string) ?? [];
+    bucket.push(user);
+    usersByDepartment.set(user.department_id as string, bucket);
+  }
+
+  const departmentOptions = departments
+    .filter((department) => (usersByDepartment.get(department.id)?.length ?? 0) > 0)
+    .map<LoginDepartmentOption>((department) => ({
+      code: department.code,
+      headUserId: department.head_user_id,
+      headUserName: department.head_user_id ? userNameById.get(department.head_user_id) ?? null : null,
+      id: department.id,
+      name: department.name,
+      userCount: usersByDepartment.get(department.id)?.length ?? 0,
+    }));
+
+  const userOptions = usersInActiveDepartments.map<LoginUserOption>((user) => ({
+    departmentId: user.department_id,
+    departmentName: user.department_id ? activeDepartmentMap.get(user.department_id)?.name ?? null : null,
+    displayName: user.profile_name?.trim() || user.name,
+    id: user.id,
+    name: user.name,
+    profileName: user.profile_name,
+    role: user.role,
+    title: user.title,
+  }));
+
+  return {
+    departments: departmentOptions,
+    users: userOptions,
+  };
+}
+
+export async function getInitialSetupUsersByDepartment(departmentId: string): Promise<LoginUsersData> {
+  const bootstrapData = await getInitialSetupBootstrapData();
+  const department = bootstrapData.departments.find((item) => item.id === departmentId) ?? null;
+
+  return {
+    department,
+    users: bootstrapData.users.filter((user) => user.departmentId === departmentId),
+  };
+}
+
+export async function lookupUserForInitialSetup(
+  input: InitialSetupLookupInput,
+): Promise<InitialSetupLookupData> {
+  const user = await findUserByDepartmentAndName(input);
 
   if (!user || !user.is_active) {
-    return {
-      canActivate: false,
-      profile: null,
-    };
+    throw new ApiError(
+      404,
+      "선택한 부서와 이름에 해당하는 사용자를 찾을 수 없습니다.",
+      null,
+      "AUTH_SETUP_USER_NOT_FOUND",
+    );
   }
 
   const department = await getDepartmentRecord(user.department_id);
 
   return {
-    canActivate: !user.auth_user_id,
+    canRegisterCompanyEmail: !hasCompanyEmail(user.email),
+    existingEmail: normalizeEmailAddress(user.email),
     profile: buildAuthenticatedProfile(user, department),
   };
 }
 
+export async function registerCompanyEmail(
+  input: RegisterCompanyEmailInput,
+): Promise<RegisterCompanyEmailResult> {
+  const normalizedEmail = normalizeEmailAddress(input.email);
+
+  if (!normalizedEmail || !normalizedEmail.endsWith(COMPANY_EMAIL_DOMAIN)) {
+    throw new ApiError(400, "회사 이메일만 등록할 수 있습니다.", null, "AUTH_COMPANY_EMAIL_REQUIRED");
+  }
+
+  const client = createSupabaseServerClient();
+  const user = await findUserById(input.userId);
+
+  if (!user || !user.is_active) {
+    throw new ApiError(
+      404,
+      "선택한 부서와 이름에 해당하는 사용자를 찾을 수 없습니다.",
+      null,
+      "AUTH_SETUP_USER_NOT_FOUND",
+    );
+  }
+
+  if (hasCompanyEmail(user.email)) {
+    throw new ApiError(
+      409,
+      "이미 회사 이메일이 등록된 사용자입니다. 이메일 로그인 또는 비밀번호 재설정을 이용해주세요.",
+      null,
+      "AUTH_COMPANY_EMAIL_ALREADY_REGISTERED",
+    );
+  }
+
+  await ensureCompanyEmailAvailable(normalizedEmail, user.id);
+
+  const beforeEmail = normalizeEmailAddress(user.email);
+  const updateQuery = await client
+    .from("users")
+    .update({
+      email: normalizedEmail,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id)
+    .select("id")
+    .single<{ id: string }>();
+
+  if (updateQuery.error) {
+    throw new ApiError(500, "회사 이메일을 저장하지 못했습니다.", updateQuery.error, "AUTH_EMAIL_REGISTER_FAILED");
+  }
+
+  await recordHistory(client, {
+    action: beforeEmail ? "USER_EMAIL_UPDATED" : "USER_EMAIL_REGISTERED",
+    actorId: user.id,
+    afterData: { email: normalizedEmail },
+    beforeData: { email: beforeEmail },
+    entityId: user.id,
+    entityType: "user",
+    metadata: {
+      registeredBy: "self-service",
+      type: "company-email",
+    },
+  });
+
+  return {
+    email: normalizedEmail,
+    message: "이메일이 등록되었습니다. 비밀번호를 설정해주세요.",
+  };
+}
+
+export async function activateUserWithEmail(input: ActivateAccountInput): Promise<ActivateAccountResult> {
+  const user = await findUserById(input.userId);
+
+  if (!user || !user.is_active) {
+    throw new ApiError(
+      404,
+      "선택한 부서와 이름에 해당하는 사용자를 찾을 수 없습니다.",
+      null,
+      "AUTH_SETUP_USER_NOT_FOUND",
+    );
+  }
+
+  if (input.password !== input.passwordConfirm) {
+    throw new ApiError(400, "비밀번호 확인이 일치하지 않습니다.", null, "AUTH_PASSWORD_CONFIRM_MISMATCH");
+  }
+
+  const email = normalizeEmailAddress(user.email);
+
+  if (!email || !hasCompanyEmail(email)) {
+    throw new ApiError(400, "회사 이메일을 먼저 등록해주세요.", null, "AUTH_COMPANY_EMAIL_NOT_REGISTERED");
+  }
+
+  await ensureCompanyEmailAvailable(email, user.id);
+
+  const authUser = await upsertAuthUser(user, email, input.password);
+  await linkAuthUserToPublicUser(user.id, authUser.id);
+
+  return {
+    completed: true,
+    email,
+    message: "비밀번호 설정이 완료되었습니다. 이메일로 로그인해주세요.",
+    redirectTo: `/login?setup=completed&email=${encodeURIComponent(email)}`,
+  };
+}
+
 export async function loginWithEmail(input: LoginRequestInput): Promise<AuthLoginResult> {
-  const email = input.email.trim().toLowerCase();
+  const email = normalizeEmailAddress(input.email);
   const requestContext = await readRequestContextFromHeaders();
+
+  if (!email) {
+    throw new ApiError(401, "이메일 또는 비밀번호를 확인해주세요.", null, "AUTH_LOGIN_FAILED");
+  }
 
   try {
     const authUser = await authenticateWithSupabase(email, input.password);
     const publicUser = await findUserByAuthUserId(authUser.id);
 
-    if (!publicUser || !publicUser.is_active) {
-      throw new ApiError(403, "사용자 정보 또는 권한을 확인해주세요.", null, "AUTH_PUBLIC_USER_NOT_FOUND");
+    if (!publicUser || !publicUser.is_active || !hasCompanyEmail(publicUser.email)) {
+      throw new ApiError(401, "이메일 또는 비밀번호를 확인해주세요.", null, "AUTH_PUBLIC_USER_NOT_FOUND");
     }
 
     await updateUserLoginTimestamps(publicUser.id);
-    const result = await buildLoginResult(publicUser, input.rememberMe);
+    const refreshedUser = (await findUserById(publicUser.id)) ?? publicUser;
+    const result = await buildLoginResult(refreshedUser, input.rememberMe);
 
     runBackgroundTask("auth-login-success", () =>
       trackAuthActivity({
@@ -355,7 +703,7 @@ export async function loginWithEmail(input: LoginRequestInput): Promise<AuthLogi
 
     return result;
   } catch (error) {
-    const publicUser = await findUserByEmail(email).catch(() => null);
+    const publicUser = await findUserByNormalizedEmail(email).catch(() => null);
 
     runBackgroundTask("auth-login-failed", () =>
       trackAuthActivity({
@@ -368,45 +716,23 @@ export async function loginWithEmail(input: LoginRequestInput): Promise<AuthLogi
     );
 
     if (error instanceof ApiError) {
-      throw error;
+      throw new ApiError(401, "이메일 또는 비밀번호를 확인해주세요.", error.details, "AUTH_LOGIN_FAILED");
     }
 
     throw new ApiError(401, "이메일 또는 비밀번호를 확인해주세요.", null, "AUTH_LOGIN_FAILED");
   }
 }
 
-export async function activateUserWithEmail(input: ActivateAccountInput): Promise<AuthLoginResult> {
-  const email = input.email.trim().toLowerCase();
-  const lookup = await lookupUserForActivation(email);
-
-  if (!lookup.profile) {
-    throw new ApiError(404, "등록된 조직 사용자를 찾을 수 없습니다.", null, "AUTH_ACTIVATION_USER_NOT_FOUND");
-  }
-
-  if (!lookup.canActivate) {
-    throw new ApiError(
-      409,
-      "이미 활성화된 사용자입니다. 로그인 또는 비밀번호 재설정을 이용해주세요.",
-      null,
-      "AUTH_ACTIVATION_ALREADY_DONE",
-    );
-  }
-
-  const authUser = await createAuthUser(email, input.password);
-  await linkAuthUserToPublicUser(lookup.profile.userId, authUser.id);
-
-  return loginWithEmail({
-    email,
-    password: input.password,
-    rememberMe: input.rememberMe,
-  });
-}
-
 export async function requestPasswordReset(input: PasswordResetRequestInput) {
-  const email = input.email.trim().toLowerCase();
-  const publicUser = await findUserByEmail(email);
+  const email = normalizeEmailAddress(input.email);
 
-  if (!publicUser?.auth_user_id || !publicUser.is_active) {
+  if (!email) {
+    return { requested: true };
+  }
+
+  const publicUser = await findUserByNormalizedEmail(email);
+
+  if (!publicUser?.auth_user_id || !publicUser.is_active || !hasCompanyEmail(publicUser.email)) {
     return { requested: true };
   }
 
@@ -416,7 +742,7 @@ export async function requestPasswordReset(input: PasswordResetRequestInput) {
   });
 
   if (error) {
-    throw new ApiError(500, "비밀번호 재설정 메일을 전송하지 못했습니다.", error, "AUTH_PASSWORD_RESET_FAILED");
+    throw new ApiError(500, "비밀번호 재설정 메일을 보내지 못했습니다.", error, "AUTH_PASSWORD_RESET_FAILED");
   }
 
   return { requested: true };
@@ -454,7 +780,7 @@ export async function getCurrentSession(): Promise<AppSession | null> {
 
   const user = await findUserByAuthUserId(payload.authUserId);
 
-  if (!user || user.id !== payload.userId) {
+  if (!user || user.id !== payload.userId || !hasCompanyEmail(user.email)) {
     await deleteAppSessionCookie();
     return null;
   }
@@ -523,8 +849,8 @@ export async function requireDepartmentSession() {
   return session;
 }
 
-export async function getAuthLookupResult(email: string): Promise<AuthLookupResult> {
-  const lookup = await lookupUserForActivation(email);
+export async function getAuthLookupResult(input: InitialSetupLookupInput): Promise<AuthLookupResult> {
+  const lookup = await lookupUserForInitialSetup(input);
 
   return {
     found: Boolean(lookup.profile),

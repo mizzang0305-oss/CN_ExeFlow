@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components";
 import { BrandPanel } from "@/components/auth/brand-panel";
-import { getCurrentSession, getDefaultAppRoute } from "@/features/auth";
+import { getCurrentSession, getDefaultAppRoute, getInitialSetupBootstrapData } from "@/features/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,8 @@ export default async function LoginPage() {
   if (session) {
     redirect(getDefaultAppRoute(session.role));
   }
+
+  const bootstrapData = await getInitialSetupBootstrapData();
 
   return (
     <main className="relative min-h-screen overflow-hidden py-8 sm:py-10">
@@ -23,7 +25,7 @@ export default async function LoginPage() {
           <BrandPanel />
 
           <div className="panel-strong flex items-center p-4 sm:p-6">
-            <LoginForm />
+            <LoginForm bootstrapData={bootstrapData} />
           </div>
         </div>
       </div>

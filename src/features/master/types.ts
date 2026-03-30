@@ -57,7 +57,7 @@ export interface DepartmentReorderInput {
 
 export interface UserUpsertInput {
   departmentId: string | null;
-  email: string;
+  email: string | null;
   isActive: boolean;
   name: string;
   profileName: string | null;

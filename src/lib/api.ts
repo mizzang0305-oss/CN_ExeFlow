@@ -12,7 +12,7 @@ export function createPlaceholderResponse(resource: string): PlaceholderApiRespo
   return {
     resource,
     status: "pending",
-    message: "초기 API 스캐폴드 상태입니다. 아직 비즈니스 로직이 연결되지 않았습니다.",
+    message: "초기 API 스텁 상태입니다. 아직 비즈니스 로직이 연결되지 않았습니다.",
   };
 }
 
@@ -72,7 +72,7 @@ export async function readJsonBody(
   if (contentType && !contentType.includes("application/json")) {
     throw new ApiError(
       415,
-      "JSON 형식으로 요청해 주세요.",
+      "JSON 형식으로 요청해주세요.",
       { contentType },
       "CONTENT_TYPE_INVALID",
     );
@@ -82,7 +82,7 @@ export async function readJsonBody(
     const parsedBody = JSON.parse(rawBody) as unknown;
 
     if (parsedBody === null || typeof parsedBody !== "object" || Array.isArray(parsedBody)) {
-      throw new ApiError(400, "JSON 객체 형태로 요청해 주세요.", null, "REQUEST_BODY_INVALID");
+      throw new ApiError(400, "JSON 객체 형식으로 요청해주세요.", null, "REQUEST_BODY_INVALID");
     }
 
     return parsedBody as JsonObject;
@@ -119,7 +119,7 @@ export function handleApiError(error: unknown) {
   return createApiErrorResponse(500, {
     code: "INTERNAL_SERVER_ERROR",
     detail: stringifyDetail(error),
-    message: "요청을 처리하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+    message: "요청을 처리하는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.",
     traceId,
   });
 }

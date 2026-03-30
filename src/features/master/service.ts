@@ -5,6 +5,7 @@ import { recordHistory } from "@/lib/history";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
 import type { UserRole } from "@/features/auth/types";
+import { normalizeEmailAddress } from "@/features/auth/utils";
 import type {
   DepartmentReorderInput,
   DepartmentUpsertInput,
@@ -47,8 +48,8 @@ function buildDisplayName(user: Pick<UserRow, "name" | "profile_name">) {
   return profileName && profileName.length > 0 ? profileName : user.name;
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
+function normalizeEmail(email: string | null | undefined) {
+  return normalizeEmailAddress(email);
 }
 
 function compareDepartments(left: DepartmentRow, right: DepartmentRow) {
@@ -364,22 +365,30 @@ async function ensureDepartmentReference(
 
 async function ensureUserEmailUnique(
   client: ReturnType<typeof createSupabaseServerClient>,
-  email: string,
+  email: string | null,
   excludeUserId?: string,
 ) {
-  let query = client.from("users").select("id").ilike("email", normalizeEmail(email));
+  const normalizedEmail = normalizeEmail(email ?? "");
+
+  if (!normalizedEmail) {
+    return;
+  }
+
+  let query = client.from("users").select("id, email").not("email", "is", null);
 
   if (excludeUserId) {
     query = query.neq("id", excludeUserId);
   }
 
-  const { data, error } = await query.limit(1);
+  const { data, error } = await query;
 
   if (error) {
     throw new ApiError(500, "이메일 중복 여부를 확인하지 못했습니다.", error, "MASTER_USER_EMAIL_CHECK_FAILED");
   }
 
-  if ((data ?? []).length > 0) {
+  const duplicated = (data ?? []).some((item) => normalizeEmail((item.email as string | null) ?? "") === normalizedEmail);
+
+  if (duplicated) {
     throw new ApiError(409, "이미 사용 중인 이메일입니다.", null, "MASTER_USER_EMAIL_DUPLICATED");
   }
 }
@@ -612,15 +621,16 @@ export async function moveDepartment(input: DepartmentReorderInput, actorId: str
 export async function createUser(input: UserUpsertInput, actorId: string) {
   const client = createSupabaseServerClient();
   const userId = crypto.randomUUID();
+  const normalizedEmail = normalizeEmail(input.email ?? "");
 
   await ensureDepartmentReference(client, input.departmentId);
-  await ensureUserEmailUnique(client, input.email);
+  await ensureUserEmailUnique(client, normalizedEmail);
 
   const insertQuery = await client
     .from("users")
     .insert({
       department_id: input.departmentId,
-      email: input.email,
+      email: normalizedEmail,
       id: userId,
       is_active: input.isActive,
       name: input.name,
@@ -657,9 +667,10 @@ export async function createUser(input: UserUpsertInput, actorId: string) {
 
 export async function updateUser(userId: string, input: UserUpsertInput, actorId: string) {
   const client = createSupabaseServerClient();
+  const normalizedEmail = normalizeEmail(input.email ?? "");
 
   await ensureDepartmentReference(client, input.departmentId);
-  await ensureUserEmailUnique(client, input.email, userId);
+  await ensureUserEmailUnique(client, normalizedEmail, userId);
 
   const existingUser = await client
     .from("users")
@@ -684,7 +695,7 @@ export async function updateUser(userId: string, input: UserUpsertInput, actorId
     .from("users")
     .update({
       department_id: input.departmentId,
-      email: input.email,
+      email: normalizedEmail,
       is_active: input.isActive,
       name: input.name,
       profile_name: input.profileName,

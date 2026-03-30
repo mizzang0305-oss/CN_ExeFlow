@@ -1,10 +1,20 @@
-import { createApiSuccessResponse } from "@/lib/api";
+import { getInitialSetupUsersByDepartment } from "@/features/auth";
+import { createApiSuccessResponse, handleApiError } from "@/lib/api";
+import { ApiError } from "@/lib/errors";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  return createApiSuccessResponse({
-    message: "이전 사용자 선택 조회는 종료되었습니다. 이메일 기준 최초 사용자 설정을 이용해주세요.",
-    supported: false,
-  });
+export async function GET(request: Request) {
+  try {
+    const departmentId = new URL(request.url).searchParams.get("departmentId")?.trim();
+
+    if (!departmentId) {
+      throw new ApiError(400, "부서를 다시 선택해주세요.", null, "LOGIN_USERS_DEPARTMENT_REQUIRED");
+    }
+
+    const data = await getInitialSetupUsersByDepartment(departmentId);
+    return createApiSuccessResponse(data);
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
