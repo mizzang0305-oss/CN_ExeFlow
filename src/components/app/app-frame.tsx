@@ -21,7 +21,7 @@ function getNavigationItems(session: AppSession): NavigationItem[] {
       { href: "/directives/approval-queue", label: "승인 대기" },
       { href: "/reports", label: "주간 집계" },
       { href: "/admin/auth-logs", label: "접속 로그" },
-      { href: "/admin/activity-logs", label: "활동 로그" },
+      { href: "/admin/activity-logs", label: "행동 로그" },
       { href: "/admin/notification-logs", label: "알림 로그" },
       { href: "/admin/master/departments", label: "조직 기준정보" },
     ];

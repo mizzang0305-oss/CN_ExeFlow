@@ -1,16 +1,10 @@
 import { getCurrentSession } from "@/features/auth";
-import { markNotificationRead } from "@/features/notifications";
+import { getNotificationSummary } from "@/features/notifications";
 import { createApiErrorResponse, createApiSuccessResponse, handleApiError } from "@/lib/api";
 
 export const runtime = "nodejs";
 
-type RouteContext = {
-  params: Promise<{
-    notificationId: string;
-  }>;
-};
-
-export async function POST(_: Request, context: RouteContext) {
+export async function GET() {
   try {
     const session = await getCurrentSession();
 
@@ -21,12 +15,8 @@ export async function POST(_: Request, context: RouteContext) {
       });
     }
 
-    const { notificationId } = await context.params;
-    await markNotificationRead(session, notificationId);
-    return createApiSuccessResponse({
-      message: "알림을 읽음 처리했습니다.",
-      read: true,
-    });
+    const result = await getNotificationSummary(session);
+    return createApiSuccessResponse(result);
   } catch (error) {
     return handleApiError(error);
   }

@@ -11,8 +11,8 @@ type NotificationLogRow = {
   delivery_status: string;
   directive_id: string | null;
   id: string;
-  metadata: Record<string, unknown> | null;
   notification_type: string;
+  payload: Record<string, unknown> | null;
   title: string;
   user_id: string;
 };
@@ -75,23 +75,17 @@ async function updateNotificationStatus(
   notificationId: string,
   values: Partial<NotificationLogRow>,
 ) {
-  const { error } = await client
-    .from("notification_logs")
-    .update(values)
-    .eq("id", notificationId);
+  const { error } = await client.from("notification_logs").update(values).eq("id", notificationId);
 
   if (error) {
     throw error;
   }
 }
 
-async function loadNotificationLog(
-  client: ReturnType<typeof createAdminClient>,
-  notificationId: string,
-) {
+async function loadNotificationLog(client: ReturnType<typeof createAdminClient>, notificationId: string) {
   const { data, error } = await client
     .from("notification_logs")
-    .select("id, user_id, directive_id, notification_type, channel, title, body, delivery_status, metadata")
+    .select("id, user_id, directive_id, notification_type, channel, title, body, delivery_status, payload")
     .eq("id", notificationId)
     .maybeSingle<NotificationLogRow>();
 
@@ -102,14 +96,12 @@ async function loadNotificationLog(
   return data;
 }
 
-async function loadPushDevices(
-  client: ReturnType<typeof createAdminClient>,
-  userId: string,
-) {
+async function loadPushDevices(client: ReturnType<typeof createAdminClient>, userId: string) {
   const { data, error } = await client
     .from("user_devices")
     .select("id, user_id, device_key, platform, device_type, push_token, notification_permission")
     .eq("user_id", userId)
+    .eq("is_active", true)
     .eq("notification_permission", "granted")
     .not("push_token", "is", null);
 
@@ -117,13 +109,12 @@ async function loadPushDevices(
     throw error;
   }
 
-  return (data ?? []) as UserDeviceRow[];
+  return ((data ?? []) as UserDeviceRow[]).filter(
+    (device) => !!device.push_token && !device.push_token.startsWith("preview-web-push:"),
+  );
 }
 
-async function dispatchToProvider(
-  notification: NotificationLogRow,
-  devices: UserDeviceRow[],
-) {
+async function dispatchToProvider(notification: NotificationLogRow, devices: UserDeviceRow[]) {
   const pushWebhookUrl = Deno.env.get("PUSH_PROVIDER_WEBHOOK_URL");
   const pushWebhookSecret = Deno.env.get("PUSH_PROVIDER_WEBHOOK_SECRET");
 
@@ -136,6 +127,7 @@ async function dispatchToProvider(
 
   const response = await fetch(pushWebhookUrl, {
     body: JSON.stringify({
+      body: notification.body,
       channel: notification.channel,
       devices: devices.map((device) => ({
         deviceKey: device.device_key,
@@ -146,9 +138,8 @@ async function dispatchToProvider(
       directiveId: notification.directive_id,
       notificationLogId: notification.id,
       notificationType: notification.notification_type,
+      payload: notification.payload ?? {},
       title: notification.title,
-      body: notification.body,
-      metadata: notification.metadata ?? {},
     }),
     headers: {
       "Content-Type": "application/json",
@@ -164,15 +155,10 @@ async function dispatchToProvider(
     } as const;
   }
 
-  return {
-    ok: true,
-  } as const;
+  return { ok: true } as const;
 }
 
-async function dispatchSingleNotification(
-  client: ReturnType<typeof createAdminClient>,
-  notificationId: string,
-) {
+async function dispatchSingleNotification(client: ReturnType<typeof createAdminClient>, notificationId: string) {
   const notification = await loadNotificationLog(client, notificationId);
 
   if (!notification) {
@@ -182,13 +168,20 @@ async function dispatchSingleNotification(
     } as const;
   }
 
+  if (notification.channel !== "WEB_PUSH") {
+    return {
+      notificationId,
+      result: "skip_non_web_push",
+    } as const;
+  }
+
   const devices = await loadPushDevices(client, notification.user_id);
 
   if (devices.length === 0) {
     await updateNotificationStatus(client, notification.id, {
       delivery_status: "FAILED",
-      metadata: {
-        ...(notification.metadata ?? {}),
+      payload: {
+        ...(notification.payload ?? {}),
         dispatchReason: "device_unavailable",
       },
     });
@@ -204,8 +197,8 @@ async function dispatchSingleNotification(
   if (!dispatchResult.ok) {
     await updateNotificationStatus(client, notification.id, {
       delivery_status: "FAILED",
-      metadata: {
-        ...(notification.metadata ?? {}),
+      payload: {
+        ...(notification.payload ?? {}),
         dispatchReason: dispatchResult.reason,
       },
     });
@@ -218,8 +211,8 @@ async function dispatchSingleNotification(
 
   await updateNotificationStatus(client, notification.id, {
     delivery_status: "SENT",
-    metadata: {
-      ...(notification.metadata ?? {}),
+    payload: {
+      ...(notification.payload ?? {}),
       dispatchedAt: new Date().toISOString(),
       dispatchedDeviceCount: devices.length,
     },
@@ -238,8 +231,8 @@ Deno.serve(async (request) => {
 
   if (request.method !== "POST") {
     return jsonResponse(405, {
-      ok: false,
       error: "POST 요청만 허용됩니다.",
+      ok: false,
     });
   }
 
@@ -249,8 +242,8 @@ Deno.serve(async (request) => {
     body = (await request.json()) as DispatchRequestBody;
   } catch {
     return jsonResponse(400, {
-      ok: false,
       error: "요청 본문이 올바른 JSON 형식이 아닙니다.",
+      ok: false,
     });
   }
 
@@ -258,8 +251,8 @@ Deno.serve(async (request) => {
 
   if (notificationIds.length === 0) {
     return jsonResponse(400, {
-      ok: false,
       error: "notificationLogId 또는 notificationLogIds가 필요합니다.",
+      ok: false,
     });
   }
 
@@ -279,8 +272,8 @@ Deno.serve(async (request) => {
     console.error("[push-dispatch]", error);
 
     return jsonResponse(500, {
+      error: "웹푸시 디스패치 처리 중 오류가 발생했습니다.",
       ok: false,
-      error: "푸시 디스패치 처리 중 오류가 발생했습니다.",
     });
   }
 });

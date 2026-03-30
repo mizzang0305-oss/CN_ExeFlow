@@ -6,6 +6,7 @@ import { getDefaultAppRoute, roleLabelMap } from "@/features/auth/utils";
 import { StatusPill } from "@/components/ui/status-pill";
 
 import { LogoutButton } from "./logout-button";
+import { NotificationInboxLink } from "./notification-inbox-link";
 import { type NavigationItem, TopNav } from "./top-nav";
 
 type AppHeaderProps = {
@@ -39,16 +40,16 @@ export function AppHeader({
                 </span>
                 <div>
                   <p className="text-sm font-semibold tracking-[0.22em] text-brand-100">CN EXEFLOW</p>
-                  <p className="text-xs font-medium text-white/60">실행 통제 플랫폼</p>
+                  <p className="text-xs font-medium text-white/60">조직 실행 통제 시스템</p>
                 </div>
               </Link>
 
-              <StatusPill tone="muted">회사 이메일 기반 운영 시스템</StatusPill>
+              <StatusPill tone="muted">대표 지시 · 부서 실행 · 승인 통제</StatusPill>
             </div>
 
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-100/70">
-                실행 통제 플랫폼
+                실행 통제 대시보드
               </p>
               <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-[2rem]">{title}</h1>
               {description ? <p className="max-w-3xl text-sm leading-7 text-white/74">{description}</p> : null}
@@ -57,7 +58,7 @@ export function AppHeader({
             <div className="flex flex-wrap gap-2">
               <StatusPill tone="muted">{roleLabelMap[session.role]}</StatusPill>
               <StatusPill tone="muted">{session.departmentName ?? "미배정 부서"}</StatusPill>
-              <StatusPill tone="muted">실행 · 증빙 · 승인 · 집계</StatusPill>
+              <StatusPill tone="muted">지시 · 증빙 · 승인 · 결산 추적</StatusPill>
             </div>
           </div>
 
@@ -76,7 +77,7 @@ export function AppHeader({
 
                 <div className="space-y-2 text-right">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">
-                    실시간 실행도
+                    운영 상태
                   </p>
                   <div className="loading-bar h-2 w-24 rounded-full bg-white/10">
                     <div className="h-full w-3/4 rounded-full bg-[linear-gradient(90deg,var(--color-brand-500),#93c5fd)]" />
@@ -84,7 +85,10 @@ export function AppHeader({
                 </div>
               </div>
 
-              <LogoutButton />
+              <div className="flex items-center justify-end gap-2">
+                <NotificationInboxLink currentPath={currentPath} />
+                <LogoutButton />
+              </div>
             </div>
           </div>
         </div>

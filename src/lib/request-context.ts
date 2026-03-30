@@ -21,11 +21,7 @@ function detectDeviceType(userAgent: string | null) {
     return "태블릿";
   }
 
-  if (
-    normalized.includes("mobi") ||
-    normalized.includes("iphone") ||
-    normalized.includes("android")
-  ) {
+  if (normalized.includes("mobi") || normalized.includes("iphone") || normalized.includes("android")) {
     return "모바일";
   }
 

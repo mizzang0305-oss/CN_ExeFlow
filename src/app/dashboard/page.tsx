@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppFrame, Badge, EmptyState, ErrorState, KpiCard, SectionCard, StatusPill } from "@/components";
+import { NotificationPermissionBanner } from "@/components/dashboard/notification-permission-banner";
 import { requireDashboardSession } from "@/features/auth";
 import {
   directiveLogTypeLabels,
@@ -147,6 +148,8 @@ export default async function DashboardPage() {
       description="숫자, 승인 대기, 지연 리스크, 최근 실행 이력을 한 흐름으로 연결해 즉시 판단할 수 있도록 정리했습니다."
     >
       <div className="space-y-6">
+        <NotificationPermissionBanner />
+
         <section className="panel-strong relative overflow-hidden p-6 sm:p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(47,130,237,0.14),transparent_30%)]" />
           <div className="relative grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
