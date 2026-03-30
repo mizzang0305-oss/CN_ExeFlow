@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 import { Button, Card } from "@/components";
 import type { NotificationPermissionState } from "@/features/notifications/types";
@@ -40,19 +41,20 @@ async function syncDevice(permission: NotificationPermissionState) {
   await postJson("/api/user/device", registration);
 }
 
-async function trackPermissionActivity(permission: NotificationPermissionState) {
+async function trackPermissionActivity(permission: NotificationPermissionState, pagePath: string) {
   await postJson("/api/activity/track", {
     activityType: permission === "granted" ? "NOTIFICATION_PERMISSION_GRANTED" : "NOTIFICATION_PERMISSION_DENIED",
     metadata: {
       deviceKey: getClientDeviceKey(),
       permission,
     },
-    pagePath: "/dashboard",
+    pagePath,
     targetType: "notification-permission",
   });
 }
 
 export function NotificationPermissionBanner() {
+  const pathname = usePathname();
   const [isPending, setIsPending] = useState(false);
   const [bannerState, setBannerState] = useState<BannerState>("hidden");
 
@@ -102,7 +104,7 @@ export function NotificationPermissionBanner() {
 
       if (permission === "granted" || permission === "denied") {
         try {
-          await trackPermissionActivity(permission);
+          await trackPermissionActivity(permission, pathname || "/dashboard");
         } catch (error) {
           console.error("[notification-permission-banner] activity track failed", error);
         }

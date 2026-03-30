@@ -1,5 +1,4 @@
-import { getCurrentSession } from "@/features/auth";
-import { getDashboardData } from "@/features/dashboard";
+import { getCurrentSession, getDefaultAppRoute } from "@/features/auth";
 import { createApiErrorResponse, createApiSuccessResponse, handleApiError } from "@/lib/api";
 
 export const runtime = "nodejs";
@@ -15,8 +14,10 @@ export async function GET() {
       });
     }
 
-    const data = await getDashboardData(session);
-    return createApiSuccessResponse(data);
+    return createApiSuccessResponse({
+      redirectTo: getDefaultAppRoute(session.role),
+      role: session.role,
+    });
   } catch (error) {
     return handleApiError(error);
   }

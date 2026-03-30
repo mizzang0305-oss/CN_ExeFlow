@@ -4,6 +4,10 @@ import type { UserActivityType } from "./types";
 
 const userActivityTypes: UserActivityType[] = [
   "DASHBOARD_VIEW",
+  "CEO_DASHBOARD_VIEW",
+  "DEPARTMENT_BOARD_VIEW",
+  "STAFF_HOME_VIEW",
+  "VIEWER_HOME_VIEW",
   "DIRECTIVE_LIST_VIEW",
   "DIRECTIVE_DETAIL_VIEW",
   "COMPLETION_REQUEST_CLICK",
@@ -15,6 +19,8 @@ const userActivityTypes: UserActivityType[] = [
   "NOTIFICATION_INBOX_VIEW",
   "NOTIFICATION_PERMISSION_GRANTED",
   "NOTIFICATION_PERMISSION_DENIED",
+  "UNAUTHORIZED_ROUTE_ACCESS",
+  "UNAUTHORIZED_API_ACCESS",
 ];
 
 export const activityPaginationSchema = z.object({

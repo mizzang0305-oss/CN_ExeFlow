@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CN EXEFLOW",
-  description: "CN FOOD 실행 지시와 부서 운영을 관리하는 실행 통제 시스템",
+  description: "CN FOOD 지시 실행, 부서 운영, 승인 흐름을 통제하는 실행 관리 시스템",
 };
 
 export default function RootLayout({

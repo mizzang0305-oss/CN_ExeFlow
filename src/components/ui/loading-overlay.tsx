@@ -4,32 +4,33 @@ type LoadingOverlayProps = {
 };
 
 export function LoadingOverlay({
-  message = "CN EXEFLOW 준비 중",
-  submessage = "실행 흐름과 운영 지표를 불러오고 있습니다.",
+  message = "실행 현황을 불러오는 중",
+  submessage = "지시 데이터를 정리하고 있습니다.",
 }: LoadingOverlayProps) {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(180deg,var(--color-brand-950),#0a274b)] px-4 text-white">
-      <div className="brand-grid absolute inset-0 opacity-25" />
-      <div className="absolute left-[-8rem] top-[-6rem] h-72 w-72 rounded-full bg-brand-500/20 blur-3xl" />
-      <div className="absolute bottom-[-8rem] right-[-4rem] h-80 w-80 rounded-full bg-brand-700/30 blur-3xl" />
+      <div className="brand-grid absolute inset-0 opacity-24" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(47,130,237,0.16),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(20,73,133,0.18),transparent_32%)]" />
 
       <div className="relative w-full max-w-md rounded-[36px] border border-white/12 bg-white/8 p-7 shadow-[0_32px_90px_rgba(0,0,0,0.32)] backdrop-blur-xl">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-[26px] bg-[linear-gradient(135deg,var(--color-brand-500),var(--color-brand-700))] shadow-[0_18px_36px_rgba(47,130,237,0.28)]">
-              <div
-                className="absolute inset-[-5px] rounded-[30px] border border-white/15"
-                style={{ animation: "brand-pulse 2.4s ease-in-out infinite" }}
-              />
-              <span className="text-base font-bold tracking-[0.18em]">CN</span>
+            <div className="relative flex h-18 w-18 items-center justify-center">
+              <div className="cn-loading-ring absolute inset-0 rounded-full border border-white/16" />
+              <div className="cn-loading-ring cn-loading-ring--accent absolute inset-[5px] rounded-full border border-brand-200/65" />
+              <div className="cn-loading-grid absolute inset-[9px] rounded-full" />
+              <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-brand-500),var(--color-brand-700))] shadow-[0_18px_36px_rgba(47,130,237,0.28)]">
+                <span className="text-base font-bold tracking-[0.18em]">CN</span>
+              </div>
             </div>
+
             <div>
               <p className="text-sm font-semibold tracking-[0.18em] text-brand-100">CN FOOD</p>
-              <p className="text-xs text-white/70">Internal Execution Control</p>
+              <p className="text-xs text-white/70">Executive Execution Control</p>
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 opacity-0 animate-[cn-loading-fade_240ms_ease_forwards]">
             <p className="text-2xl font-semibold tracking-tight">{message}</p>
             <p className="text-sm leading-6 text-white/72">{submessage}</p>
           </div>
@@ -39,9 +40,9 @@ export function LoadingOverlay({
               <div className="h-full w-2/3 rounded-full bg-[linear-gradient(90deg,var(--color-brand-500),#93c5fd)]" />
             </div>
             <div className="grid gap-2 text-xs text-white/62 sm:grid-cols-3">
-              <span>대표 지시 수집</span>
-              <span>현장 로그 동기화</span>
-              <span>승인 흐름 정렬</span>
+              <span>지시 데이터 정리</span>
+              <span>승인 대기 분석</span>
+              <span>실행 로그 동기화</span>
             </div>
           </div>
         </div>

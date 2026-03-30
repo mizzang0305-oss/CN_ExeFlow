@@ -128,6 +128,24 @@
     animation: brand-shimmer 1.8s linear infinite;
   }
 
+  .cn-loading-ring {
+    animation: cn-loading-spin 6s linear infinite;
+  }
+
+  .cn-loading-ring--accent {
+    animation-duration: 10s;
+    animation-direction: reverse;
+  }
+
+  .cn-loading-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.15) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+    background-size: 12px 12px;
+    opacity: 0.28;
+    animation: cn-loading-pulse 2.6s ease-in-out infinite;
+  }
+
   .loading-bar::after {
     content: "";
     position: absolute;
@@ -194,5 +212,46 @@
   50% {
     transform: scale(1.08);
     opacity: 1;
+  }
+}
+
+@keyframes cn-loading-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cn-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.38;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes cn-loading-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-shimmer,
+  .cn-loading-ring,
+  .cn-loading-ring--accent,
+  .cn-loading-grid,
+  .loading-bar::after {
+    animation: none !important;
   }
 }

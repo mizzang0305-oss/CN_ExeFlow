@@ -3,7 +3,7 @@ import "server-only";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { trackAuthActivity } from "@/features/activity/service";
+import { trackAuthActivity, trackUserActivity } from "@/features/activity/service";
 import { runBackgroundTask } from "@/lib/background-task";
 import { ApiError } from "@/lib/errors";
 import { recordHistory } from "@/lib/history";
@@ -39,7 +39,10 @@ import type {
 } from "./types";
 import {
   COMPANY_EMAIL_DOMAIN,
+  canViewDepartmentBoard,
   canViewDashboard,
+  canViewStaffHome,
+  canViewViewerHome,
   getDefaultAppRoute,
   hasCompanyEmail,
   isAdminRole,
@@ -799,11 +802,42 @@ export async function requireCurrentSession() {
   return session;
 }
 
-export async function requireDashboardSession() {
+function auditUnauthorizedDashboardAccess(
+  session: AppSession,
+  attemptedPath: string,
+  requiredRoles: UserRole[],
+  accessType: "API" | "PAGE",
+) {
+  runBackgroundTask("dashboard-access-denied", () =>
+    trackUserActivity({
+      activityType: accessType === "API" ? "UNAUTHORIZED_API_ACCESS" : "UNAUTHORIZED_ROUTE_ACCESS",
+      metadata: {
+        accessType,
+        attemptedPath,
+        requiredRoles: requiredRoles.join(","),
+        role: session.role,
+      },
+      pagePath: attemptedPath,
+      session,
+      targetType: "dashboard",
+    }),
+  );
+}
+
+function redirectUnauthorizedRoleHome(
+  session: AppSession,
+  attemptedPath: string,
+  requiredRoles: UserRole[],
+) {
+  auditUnauthorizedDashboardAccess(session, attemptedPath, requiredRoles, "PAGE");
+  redirect(getDefaultAppRoute(session.role));
+}
+
+export async function requireDashboardSession(attemptedPath = "/dashboard/ceo") {
   const session = await requireCurrentSession();
 
   if (!canViewDashboard(session.role)) {
-    redirect(getDefaultAppRoute(session.role));
+    redirectUnauthorizedRoleHome(session, attemptedPath, ["CEO", "SUPER_ADMIN"]);
   }
 
   return session;
@@ -837,6 +871,44 @@ export async function requireExecutiveSession() {
   }
 
   return session;
+}
+
+export async function requireDepartmentHeadSession(attemptedPath = "/board") {
+  const session = await requireCurrentSession();
+
+  if (!session.departmentId || !canViewDepartmentBoard(session.role)) {
+    redirectUnauthorizedRoleHome(session, attemptedPath, ["DEPARTMENT_HEAD"]);
+  }
+
+  return session;
+}
+
+export async function requireStaffSession(attemptedPath = "/workspace") {
+  const session = await requireCurrentSession();
+
+  if (!canViewStaffHome(session.role)) {
+    redirectUnauthorizedRoleHome(session, attemptedPath, ["STAFF"]);
+  }
+
+  return session;
+}
+
+export async function requireViewerSession(attemptedPath = "/viewer") {
+  const session = await requireCurrentSession();
+
+  if (!canViewViewerHome(session.role)) {
+    redirectUnauthorizedRoleHome(session, attemptedPath, ["VIEWER"]);
+  }
+
+  return session;
+}
+
+export function auditUnauthorizedDashboardApiAccess(
+  session: AppSession,
+  attemptedPath: string,
+  requiredRoles: UserRole[],
+) {
+  auditUnauthorizedDashboardAccess(session, attemptedPath, requiredRoles, "API");
 }
 
 export async function requireDepartmentSession() {

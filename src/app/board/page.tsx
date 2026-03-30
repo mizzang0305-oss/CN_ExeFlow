@@ -10,7 +10,8 @@ import {
   StatusPill,
   WorkflowActionPanel,
 } from "@/components";
-import { requireDepartmentSession } from "@/features/auth";
+import { trackUserActivityAsync } from "@/features/activity";
+import { requireDepartmentHeadSession } from "@/features/auth";
 import { directiveLogTypeLabels, getDepartmentBoardData, type DirectiveListItem } from "@/features/directives";
 import { formatDateLabel, formatDateTimeLabel, formatRelativeUpdate } from "@/lib";
 
@@ -99,13 +100,19 @@ function buildLowActivitySignals(signals: AssigneeSignal[]) {
 }
 
 export default async function DepartmentBoardPage() {
-  const session = await requireDepartmentSession();
+  const session = await requireDepartmentHeadSession("/board");
 
   let board: Awaited<ReturnType<typeof getDepartmentBoardData>> | null = null;
   let errorMessage: string | null = null;
 
   try {
     board = await getDepartmentBoardData(session);
+    trackUserActivityAsync({
+      activityType: "DEPARTMENT_BOARD_VIEW",
+      pagePath: "/board",
+      session,
+      targetType: "dashboard",
+    });
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "부서 실행보드를 불러오지 못했습니다.";
   }
@@ -137,6 +144,7 @@ export default async function DepartmentBoardPage() {
   return (
     <AppFrame
       currentPath="/board"
+      enforceRoleHome
       session={session}
       title={`${session.departmentName ?? "부서"} 실행보드`}
       description="우리 부서 KPI, 담당자별 실행 현황, 완료 요청과 재진행 흐름을 한 번에 처리할 수 있게 정리했습니다."
