@@ -23,14 +23,14 @@
 
 create extension if not exists pgcrypto;
 
-drop table if exists tmp_cn_directive_resolved;
-drop table if exists tmp_cn_directive_target_departments;
-drop table if exists tmp_cn_directive_prepared;
-drop table if exists tmp_cn_legacy_department_map;
-drop table if exists tmp_cn_directive_import_settings;
-drop table if exists tmp_cn_directive_import;
+drop table if exists public.tmp_cn_directive_resolved;
+drop table if exists public.tmp_cn_directive_target_departments;
+drop table if exists public.tmp_cn_directive_prepared;
+drop table if exists public.tmp_cn_legacy_department_map;
+drop table if exists public.tmp_cn_directive_import_settings;
+drop table if exists public.tmp_cn_directive_import;
 
-create table tmp_cn_directive_import (
+create table public.tmp_cn_directive_import (
   source_no int not null,
   meeting_date_raw text not null,
   chair_role text not null,
@@ -40,7 +40,7 @@ create table tmp_cn_directive_import (
   note text null
 );
 
-insert into tmp_cn_directive_import (
+insert into public.tmp_cn_directive_import (
   source_no,
   meeting_date_raw,
   chair_role,
@@ -127,13 +127,13 @@ insert into tmp_cn_directive_import (
   (76, '4.17', '부사장', '경고 3회 이후 운영기준 취지 유지, 사면성 리셋 또는 상벌 연계형 보완방안 별도 지침 받아 검토', '전 부서', '진행중', null),
   (77, '4.17', '부사장', '리더 공식석상 감정 배설성 발언 지양, 배려·명확성 중심 표현 기준 준수 재강조', '전 부서', '진행중', null);
 
-create table tmp_cn_directive_import_settings (
+create table public.tmp_cn_directive_import_settings (
   import_year int not null,
   import_batch text not null,
   all_department_owner_name text not null
 );
 
-insert into tmp_cn_directive_import_settings (
+insert into public.tmp_cn_directive_import_settings (
   import_year,
   import_batch,
   all_department_owner_name
@@ -143,12 +143,12 @@ insert into tmp_cn_directive_import_settings (
   '주식회사 씨엔푸드'
 );
 
-create table tmp_cn_legacy_department_map (
+create table public.tmp_cn_legacy_department_map (
   legacy_name text primary key,
   canonical_name text not null
 );
 
-insert into tmp_cn_legacy_department_map (
+insert into public.tmp_cn_legacy_department_map (
   legacy_name,
   canonical_name
 ) values
@@ -158,7 +158,7 @@ insert into tmp_cn_legacy_department_map (
   ('구매물류부', '물류부'),
   ('육가공', '육가공팀');
 
-create table tmp_cn_directive_prepared as
+create table public.tmp_cn_directive_prepared as
 with normalized as (
   select
     t.source_no,
@@ -183,7 +183,7 @@ with normalized as (
       when '반려' then 'REJECTED'
       else null
     end as status_en
-  from tmp_cn_directive_import t
+  from public.tmp_cn_directive_import t
 )
 select
   n.source_no,
@@ -212,9 +212,9 @@ select
   end as target_scope,
   n.status_en
 from normalized n
-cross join tmp_cn_directive_import_settings s;
+cross join public.tmp_cn_directive_import_settings s;
 
-create table tmp_cn_directive_target_departments as
+create table public.tmp_cn_directive_target_departments as
 with active_departments as (
   select
     d.id,
@@ -235,10 +235,10 @@ selected_targets as (
     d.id as department_id,
     d.name as department_name,
     d.head_user_id as department_head_id
-  from tmp_cn_directive_prepared p
+  from public.tmp_cn_directive_prepared p
   join lateral regexp_split_to_table(p.departments_raw, '\s*,\s*') with ordinality as dep(legacy_name, ordinality)
     on p.target_scope = 'SELECTED'
-  join tmp_cn_legacy_department_map m
+  join public.tmp_cn_legacy_department_map m
     on m.legacy_name = trim(dep.legacy_name)
   join active_departments d
     on d.name = m.canonical_name
@@ -260,8 +260,8 @@ all_targets as (
     d.id as department_id,
     d.name as department_name,
     d.head_user_id as department_head_id
-  from tmp_cn_directive_prepared p
-  cross join tmp_cn_directive_import_settings s
+  from public.tmp_cn_directive_prepared p
+  cross join public.tmp_cn_directive_import_settings s
   join active_departments d
     on p.target_scope = 'ALL'
 ),
@@ -307,12 +307,12 @@ select
   end as assignment_role
 from ranked r;
 
-create table tmp_cn_directive_resolved as
+create table public.tmp_cn_directive_resolved as
 with mapped_names as (
   select
     t.directive_no,
     string_agg(t.department_name, ', ' order by t.target_order, t.department_name) as mapped_department_names
-  from tmp_cn_directive_target_departments t
+  from public.tmp_cn_directive_target_departments t
   group by t.directive_no
 ),
 active_counts as (
@@ -342,8 +342,8 @@ select
   o.department_name as owner_department_name,
   m.mapped_department_names,
   a.active_department_count
-from tmp_cn_directive_prepared p
-left join tmp_cn_directive_target_departments o
+from public.tmp_cn_directive_prepared p
+left join public.tmp_cn_directive_target_departments o
   on o.directive_no = p.directive_no
  and o.is_primary = true
 left join mapped_names m
@@ -371,7 +371,7 @@ begin
     v_import_year,
     v_import_batch,
     v_all_department_owner_name
-  from tmp_cn_directive_import_settings s;
+  from public.tmp_cn_directive_import_settings s;
 
   select
     u.id,
@@ -393,7 +393,7 @@ begin
 
   if exists (
     select 1
-    from tmp_cn_directive_prepared p
+    from public.tmp_cn_directive_prepared p
     where p.status_en is null
   ) then
     raise exception 'CN import blocked: unsupported status_ko found in source data.';
@@ -403,11 +403,11 @@ begin
     select 1
     from (
       select trim(dep.legacy_name) as legacy_name
-      from tmp_cn_directive_prepared p
+      from public.tmp_cn_directive_prepared p
       join lateral regexp_split_to_table(p.departments_raw, '\s*,\s*') as dep(legacy_name)
         on p.target_scope = 'SELECTED'
     ) x
-    left join tmp_cn_legacy_department_map m
+    left join public.tmp_cn_legacy_department_map m
       on m.legacy_name = x.legacy_name
     where m.legacy_name is null
   ) then
@@ -416,7 +416,7 @@ begin
 
   if exists (
     select 1
-    from tmp_cn_legacy_department_map m
+    from public.tmp_cn_legacy_department_map m
     left join public.departments d
       on d.name = m.canonical_name
      and d.is_active = true
@@ -436,7 +436,7 @@ begin
 
   select count(*)
   into v_planned_directive_count
-  from tmp_cn_directive_resolved;
+  from public.tmp_cn_directive_resolved;
 
   if v_planned_directive_count <> 77 then
     raise exception 'CN import blocked: expected 77 directives, prepared % directives.', v_planned_directive_count;
@@ -446,7 +446,7 @@ begin
   into v_duplicate_directive_no_count
   from (
     select r.directive_no
-    from tmp_cn_directive_resolved r
+    from public.tmp_cn_directive_resolved r
     group by r.directive_no
     having count(*) > 1
   ) duplicates;
@@ -457,7 +457,7 @@ begin
 
   select count(*)
   into v_missing_owner_count
-  from tmp_cn_directive_resolved r
+  from public.tmp_cn_directive_resolved r
   where r.owner_department_id is null;
 
   if v_missing_owner_count > 0 then
@@ -472,21 +472,21 @@ begin
       end
     )::int
   into v_expected_assignment_count
-  from tmp_cn_directive_resolved r;
+  from public.tmp_cn_directive_resolved r;
 
   if (
     select count(*)
-    from tmp_cn_directive_target_departments t
+    from public.tmp_cn_directive_target_departments t
   ) <> v_expected_assignment_count then
     raise exception
       'CN import blocked: expected % directive_departments rows, prepared % rows.',
       v_expected_assignment_count,
-      (select count(*) from tmp_cn_directive_target_departments);
+      (select count(*) from public.tmp_cn_directive_target_departments);
   end if;
 
   if exists (
     select 1
-    from tmp_cn_directive_target_departments t
+    from public.tmp_cn_directive_target_departments t
     group by t.directive_no
     having count(*) filter (where t.is_primary) <> 1
   ) then
@@ -495,7 +495,7 @@ begin
 
   select count(*)
   into v_conflict_count
-  from tmp_cn_directive_resolved r
+  from public.tmp_cn_directive_resolved r
   join public.directives d
     on d.directive_no = r.directive_no
   where d.content not like '%' || v_import_batch || '%';
@@ -560,7 +560,7 @@ begin
     null,
     false,
     r.target_scope
-  from tmp_cn_directive_resolved r
+  from public.tmp_cn_directive_resolved r
   on conflict (directive_no) do update
   set
     title = excluded.title,
@@ -597,7 +597,7 @@ begin
     t.assigned_at,
     t.is_primary,
     t.assignment_role
-  from tmp_cn_directive_target_departments t
+  from public.tmp_cn_directive_target_departments t
   join public.directives d
     on d.directive_no = t.directive_no
   on conflict (directive_id, department_id) do update
@@ -609,9 +609,9 @@ begin
   raise notice 'CN import ready: year=% batch=% created_by=% (%).', v_import_year, v_import_batch, v_import_user_id, v_import_user_email;
 end $$;
 
-drop table if exists tmp_cn_directive_resolved;
-drop table if exists tmp_cn_directive_target_departments;
-drop table if exists tmp_cn_directive_prepared;
-drop table if exists tmp_cn_legacy_department_map;
-drop table if exists tmp_cn_directive_import_settings;
-drop table if exists tmp_cn_directive_import;
+drop table if exists public.tmp_cn_directive_resolved;
+drop table if exists public.tmp_cn_directive_target_departments;
+drop table if exists public.tmp_cn_directive_prepared;
+drop table if exists public.tmp_cn_legacy_department_map;
+drop table if exists public.tmp_cn_directive_import_settings;
+drop table if exists public.tmp_cn_directive_import;
