@@ -16,12 +16,21 @@
 -- - 구매물류부 -> 물류부
 -- - 육가공 -> 육가공팀
 -- - 전 부서 -> 현재 departments 테이블의 모든 활성 부서
-
-begin;
+--
+-- NOTE:
+-- Supabase SQL 실행 환경에서는 temp table + on commit drop 이 statement 경계에서
+-- 사라질 수 있어 일반 staging table을 사용하고 마지막에 정리합니다.
 
 create extension if not exists pgcrypto;
 
-create temp table tmp_cn_directive_import (
+drop table if exists tmp_cn_directive_resolved;
+drop table if exists tmp_cn_directive_target_departments;
+drop table if exists tmp_cn_directive_prepared;
+drop table if exists tmp_cn_legacy_department_map;
+drop table if exists tmp_cn_directive_import_settings;
+drop table if exists tmp_cn_directive_import;
+
+create table tmp_cn_directive_import (
   source_no int not null,
   meeting_date_raw text not null,
   chair_role text not null,
@@ -29,7 +38,7 @@ create temp table tmp_cn_directive_import (
   departments_raw text not null,
   status_ko text not null,
   note text null
-) on commit drop;
+);
 
 insert into tmp_cn_directive_import (
   source_no,
@@ -118,11 +127,11 @@ insert into tmp_cn_directive_import (
   (76, '4.17', '부사장', '경고 3회 이후 운영기준 취지 유지, 사면성 리셋 또는 상벌 연계형 보완방안 별도 지침 받아 검토', '전 부서', '진행중', null),
   (77, '4.17', '부사장', '리더 공식석상 감정 배설성 발언 지양, 배려·명확성 중심 표현 기준 준수 재강조', '전 부서', '진행중', null);
 
-create temp table tmp_cn_directive_import_settings (
+create table tmp_cn_directive_import_settings (
   import_year int not null,
   import_batch text not null,
   all_department_owner_name text not null
-) on commit drop;
+);
 
 insert into tmp_cn_directive_import_settings (
   import_year,
@@ -134,10 +143,10 @@ insert into tmp_cn_directive_import_settings (
   '주식회사 씨엔푸드'
 );
 
-create temp table tmp_cn_legacy_department_map (
+create table tmp_cn_legacy_department_map (
   legacy_name text primary key,
   canonical_name text not null
-) on commit drop;
+);
 
 insert into tmp_cn_legacy_department_map (
   legacy_name,
@@ -149,7 +158,7 @@ insert into tmp_cn_legacy_department_map (
   ('구매물류부', '물류부'),
   ('육가공', '육가공팀');
 
-create temp table tmp_cn_directive_prepared on commit drop as
+create table tmp_cn_directive_prepared as
 with normalized as (
   select
     t.source_no,
@@ -205,7 +214,7 @@ select
 from normalized n
 cross join tmp_cn_directive_import_settings s;
 
-create temp table tmp_cn_directive_target_departments on commit drop as
+create table tmp_cn_directive_target_departments as
 with active_departments as (
   select
     d.id,
@@ -298,7 +307,7 @@ select
   end as assignment_role
 from ranked r;
 
-create temp table tmp_cn_directive_resolved on commit drop as
+create table tmp_cn_directive_resolved as
 with mapped_names as (
   select
     t.directive_no,
@@ -600,4 +609,9 @@ begin
   raise notice 'CN import ready: year=% batch=% created_by=% (%).', v_import_year, v_import_batch, v_import_user_id, v_import_user_email;
 end $$;
 
-commit;
+drop table if exists tmp_cn_directive_resolved;
+drop table if exists tmp_cn_directive_target_departments;
+drop table if exists tmp_cn_directive_prepared;
+drop table if exists tmp_cn_legacy_department_map;
+drop table if exists tmp_cn_directive_import_settings;
+drop table if exists tmp_cn_directive_import;
