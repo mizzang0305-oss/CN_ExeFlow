@@ -972,6 +972,10 @@ function canBypassDirectiveLogDepartmentValidation(session: AppSession) {
   return session.role === "SUPER_ADMIN";
 }
 
+function canCompleteDirectiveAsSuperAdmin(session: AppSession) {
+  return session.role === "SUPER_ADMIN";
+}
+
 function canShowDirectiveCompletionRequest(
   session: AppSession,
   currentDepartment: DirectiveDepartmentProgress | null,
@@ -1108,6 +1112,14 @@ function resolveRequestedDepartmentId(
   }
 
   return session.departmentId ?? directive.owner_department_id ?? directiveDepartments[0]?.department_id ?? null;
+}
+
+function resolveDirectiveCompletionLogDepartmentId(
+  session: AppSession,
+  directive: DirectiveRow,
+  directiveDepartments: DirectiveDepartmentRow[],
+) {
+  return directive.owner_department_id ?? directiveDepartments[0]?.department_id ?? session.departmentId ?? null;
 }
 
 async function promoteDirectiveToInProgressIfNeeded(
@@ -1992,6 +2004,108 @@ export async function updateDirectiveLogAsSession(
   await queueDelayNotificationIfNeeded(client, directive, directiveDepartments, directiveStatus);
 
   return updateResult.data;
+}
+
+export async function completeDirectiveAsSuperAdmin(session: AppSession, input: WorkflowDecisionInput) {
+  if (!canCompleteDirectiveAsSuperAdmin(session)) {
+    throw new ApiError(403, "통합 완료를 처리할 권한이 없습니다.", null, "DIRECTIVE_COMPLETE_ALL_DENIED");
+  }
+
+  const completionReasonError = validateCompletionRequestReason(input.reason);
+
+  if (completionReasonError) {
+    throw new ApiError(400, completionReasonError, null, "DIRECTIVE_COMPLETE_ALL_REASON_REQUIRED");
+  }
+
+  const client = createSupabaseServerClient();
+  const { directive, directiveDepartments } = await readDirectiveContext(client, input.directiveId);
+  assertDirectiveViewAccess(session, directive, directiveDepartments);
+
+  if (directive.status === "COMPLETED") {
+    throw new ApiError(400, "이미 완료된 지시사항입니다.", null, "DIRECTIVE_COMPLETE_ALL_ALREADY_COMPLETED");
+  }
+
+  if (directiveDepartments.length === 0) {
+    throw new ApiError(400, "완료 처리할 대상 부서가 없습니다.", null, "DIRECTIVE_COMPLETE_ALL_DEPARTMENT_REQUIRED");
+  }
+
+  const departmentId = resolveDirectiveCompletionLogDepartmentId(session, directive, directiveDepartments);
+
+  if (!departmentId) {
+    throw new ApiError(400, "통합 완료 로그를 남길 부서를 확인할 수 없습니다.", null, "DIRECTIVE_COMPLETE_ALL_LOG_DEPARTMENT_REQUIRED");
+  }
+
+  const happenedAt = new Date().toISOString();
+  const trimmedReason = input.reason?.trim() ?? "";
+  const insertResult = await client
+    .from("directive_logs")
+    .insert({
+      action_summary: `통합 완료: ${trimmedReason}`.slice(0, 160),
+      department_id: departmentId,
+      detail: encodeLogMeta({
+        detail: trimmedReason,
+        happenedAt,
+        logType: "STATUS_NOTE",
+        nextAction: null,
+        riskNote: null,
+      }),
+      directive_id: input.directiveId,
+      id: crypto.randomUUID(),
+      user_id: session.userId,
+    })
+    .select("*")
+    .single<DirectiveLogRow>();
+
+  if (insertResult.error) {
+    throw mapSupabaseError(
+      insertResult.error,
+      "통합 완료 로그를 저장하지 못했습니다.",
+      "DIRECTIVE_COMPLETE_ALL_LOG_CREATE_FAILED",
+    );
+  }
+
+  const closedAt = new Date().toISOString();
+  const departmentsToClose = directiveDepartments.filter((assignment) => assignment.department_status !== "COMPLETED");
+
+  for (const assignment of departmentsToClose) {
+    await updateDirectiveDepartmentStatus(client, input.directiveId, "COMPLETED", {
+      closedAt,
+      departmentId: assignment.department_id,
+    });
+  }
+
+  const directiveStatus = await syncDirectiveAggregateStatus(client, input.directiveId);
+  await recordHistory(client, {
+    action: "DIRECTIVE_LOG_CREATED",
+    actorId: session.userId,
+    afterData: insertResult.data,
+    entityId: insertResult.data.id,
+    entityType: "directive_log",
+    metadata: {
+      directiveId: directive.id,
+      directiveNo: directive.directive_no,
+      mode: "SUPER_ADMIN_COMPLETE_ALL",
+    },
+  });
+  await recordHistory(client, {
+    action: "DIRECTIVE_SUPER_ADMIN_COMPLETED",
+    actorId: session.userId,
+    entityId: input.directiveId,
+    entityType: "directive",
+    metadata: {
+      closedAt,
+      completedDepartmentCount: directiveDepartments.length,
+      directiveNo: directive.directive_no,
+      directiveStatus,
+      reason: trimmedReason,
+    },
+  });
+
+  return {
+    directiveId: directive.id,
+    directiveStatus,
+    logId: insertResult.data.id,
+  };
 }
 
 export async function softDeleteDirectiveLogAsSession(session: AppSession, input: DeleteDirectiveLogInput) {
