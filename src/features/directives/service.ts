@@ -968,6 +968,10 @@ function canManageDirectiveLogs(
   );
 }
 
+function canBypassDirectiveLogDepartmentValidation(session: AppSession) {
+  return session.role === "SUPER_ADMIN";
+}
+
 function canShowDirectiveCompletionRequest(
   session: AppSession,
   currentDepartment: DirectiveDepartmentProgress | null,
@@ -1797,7 +1801,10 @@ export async function createDirectiveLogAsSession(
     throw new ApiError(400, "로그를 남길 부서 정보를 확인할 수 없습니다.", null, "DIRECTIVE_LOG_DEPARTMENT_REQUIRED");
   }
 
-  if (!directiveDepartments.some((assignment) => assignment.department_id === departmentId)) {
+  if (
+    !canBypassDirectiveLogDepartmentValidation(session) &&
+    !directiveDepartments.some((assignment) => assignment.department_id === departmentId)
+  ) {
     throw new ApiError(403, "대상 부서에 배정된 지시사항에만 로그를 남길 수 있습니다.", null, "DIRECTIVE_LOG_DEPARTMENT_INVALID");
   }
 
@@ -1903,7 +1910,10 @@ export async function updateDirectiveLogAsSession(
     throw new ApiError(400, "로그 부서를 확인할 수 없습니다.", null, "DIRECTIVE_LOG_DEPARTMENT_REQUIRED");
   }
 
-  if (!directiveDepartments.some((assignment) => assignment.department_id === departmentId)) {
+  if (
+    !canBypassDirectiveLogDepartmentValidation(session) &&
+    !directiveDepartments.some((assignment) => assignment.department_id === departmentId)
+  ) {
     throw new ApiError(403, "대상 부서에 배정된 지시사항 로그만 수정할 수 있습니다.", null, "DIRECTIVE_LOG_DEPARTMENT_INVALID");
   }
 
