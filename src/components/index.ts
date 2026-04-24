@@ -12,6 +12,7 @@ export * from "./directives/directive-status-badge";
 export * from "./directives/log-card";
 export * from "./directives/log-form";
 export * from "./directives/soft-delete-log-button";
+export * from "./directives/super-admin-complete-panel";
 export * from "./directives/urgency-badge";
 export * from "./directives/workflow-action-panel";
 export * from "./reports/generate-weekly-report-button";

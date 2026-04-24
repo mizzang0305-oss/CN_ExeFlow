@@ -10,6 +10,7 @@ import {
   EmptyState,
   LogCard,
   SoftDeleteLogButton,
+  SuperAdminCompletePanel,
   UrgencyBadge,
   WorkflowActionPanel,
 } from "@/components";
@@ -125,6 +126,10 @@ export default async function DirectiveDetailPage({ params }: DirectiveDetailPag
               </div>
             </div>
           </Card>
+
+          {session.role === "SUPER_ADMIN" && directive.status !== "COMPLETED" ? (
+            <SuperAdminCompletePanel directiveId={directive.id} />
+          ) : null}
 
           <section className="space-y-4">
             <div>
