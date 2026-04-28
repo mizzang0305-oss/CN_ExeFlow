@@ -18,7 +18,7 @@ type AppFrameProps = {
 function getNavigationItems(session: AppSession): NavigationItem[] {
   if (isAdminRole(session.role)) {
     return [
-      { href: "/dashboard/ceo", label: "CEO 대시보드" },
+      { href: "/dashboard/ceo", label: "대표 대시보드" },
       { href: "/directives", label: "지시 관리" },
       { href: "/directives/approval-queue", label: "승인 대기" },
       { href: "/reports", label: "주간 보고" },

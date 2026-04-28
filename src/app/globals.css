@@ -176,6 +176,70 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(238, 244, 255, 0.92));
     box-shadow: 0 0 0 1px rgba(47, 130, 237, 0.18);
   }
+
+  .executive-click-target,
+  .management-clickable {
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .executive-click-target {
+    transition:
+      transform 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease;
+  }
+
+  .executive-click-target:hover,
+  .executive-click-target:focus-visible {
+    transform: translateY(-3px);
+    box-shadow: 0 24px 58px rgba(6, 18, 38, 0.13);
+  }
+
+  .executive-click-target:active,
+  .management-clickable:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .executive-click-target:focus-visible,
+  .management-clickable:focus-visible {
+    outline: 3px solid var(--color-brand-500);
+    outline-offset: 3px;
+  }
+
+  .management-clickable {
+    transition:
+      transform 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      background-color 160ms ease;
+  }
+
+  .management-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px rgba(6, 18, 38, 0.1);
+  }
+
+  .department-progress-bar {
+    transform-origin: left center;
+    animation: department-progress-grow 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .detail-panel-enter {
+    animation: detail-panel-enter 220ms ease both;
+  }
+
+  .executive-skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(238, 243, 248, 0.92) 0%,
+      rgba(255, 255, 255, 0.98) 45%,
+      rgba(221, 229, 240, 0.92) 100%
+    );
+    background-size: 220% 100%;
+    animation: executiveShimmer 1.35s ease-in-out infinite;
+  }
 }
 
 @keyframes brand-shimmer {
@@ -246,12 +310,53 @@
   }
 }
 
+@keyframes executiveShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes department-progress-grow {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes detail-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-shimmer,
   .cn-loading-ring,
   .cn-loading-ring--accent,
   .cn-loading-grid,
-  .loading-bar::after {
+  .loading-bar::after,
+  .department-progress-bar,
+  .detail-panel-enter,
+  .executive-skeleton {
     animation: none !important;
+  }
+
+  .executive-click-target:hover,
+  .executive-click-target:focus-visible,
+  .management-clickable:hover {
+    transform: none;
   }
 }

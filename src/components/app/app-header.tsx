@@ -48,10 +48,10 @@ export function AppHeader({
             </div>
 
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-100/70">
-                Execution Control
+              <p className="text-[11px] font-semibold text-brand-100/70">
+                실행 통제
               </p>
-              <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-[2rem]">{title}</h1>
+              <h1 className="text-3xl font-semibold text-white sm:text-[2rem]">{title}</h1>
               {description ? <p className="max-w-3xl text-sm leading-7 text-white/74">{description}</p> : null}
             </div>
 
@@ -76,7 +76,7 @@ export function AppHeader({
                 </div>
 
                 <div className="space-y-2 text-right">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-100/72">
+                  <p className="text-[11px] font-semibold text-brand-100/72">
                     운영 상태
                   </p>
                   <div className="loading-bar h-2 w-24 rounded-full bg-white/10">

@@ -32,7 +32,20 @@ export interface DepartmentAnalysisItem {
   completedCount: number;
   completionRate: number;
   delayedCount: number;
+  departmentId: string;
   departmentName: string;
+  inProgressCount: number;
+  rejectedCount: number;
+  totalCount: number;
+  urgentCount: number;
+  waitingApprovalCount: number;
+}
+
+export interface CeoExecutiveSummary {
+  completedCount: number;
+  completionRate: number;
+  delayedCount: number;
+  inProgressCount: number;
   totalCount: number;
   urgentCount: number;
   waitingApprovalCount: number;
@@ -52,6 +65,7 @@ export interface CeoDashboardData {
   approveNowQueue: DashboardQueueItem[];
   checkTodayQueue: DashboardQueueItem[];
   departments: DepartmentAnalysisItem[];
+  executiveSummary: CeoExecutiveSummary;
   latestReport: WeeklyReportSummary | null;
   recentActivity: DashboardRecentUpdate[];
   reportSummaryCards: DashboardKpi[];

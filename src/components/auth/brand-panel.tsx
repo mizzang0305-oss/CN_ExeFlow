@@ -2,16 +2,16 @@ import { StatusPill } from "@/components/ui/status-pill";
 
 const highlights = [
   {
-    label: "Role-aware entry",
-    value: "Secure login routing",
+    label: "역할별 진입",
+    value: "권한에 맞는 화면으로 안내",
   },
   {
-    label: "Operational clarity",
-    value: "Approvals and execution in one flow",
+    label: "실행 가시성",
+    value: "승인과 실행을 한 흐름으로 확인",
   },
   {
-    label: "Daily control",
-    value: "Stable visibility across teams",
+    label: "일일 통제",
+    value: "부서별 진행 상황을 안정적으로 파악",
   },
 ] as const;
 
@@ -44,22 +44,20 @@ export function BrandPanel() {
             </span>
             <div>
               <p className="text-sm font-semibold tracking-[0.3em] text-brand-100">CN EXEFLOW</p>
-              <p className="text-xs text-white/62">Executive workflow control</p>
+              <p className="text-xs text-white/62">대표 실행 통제</p>
             </div>
           </div>
-          <StatusPill tone="muted">Brand motion preview</StatusPill>
+          <StatusPill tone="muted">실행 현황 미리보기</StatusPill>
         </div>
 
         <div className="max-w-2xl space-y-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.34em] text-brand-100/82">
-            Premium login experience
-          </p>
-          <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-[3.35rem] sm:leading-[1.02]">
-            Move from sign-in to execution with one calm, connected command surface.
+          <p className="text-xs font-semibold text-brand-100/82">경영진 로그인 경험</p>
+          <h1 className="max-w-2xl text-4xl font-semibold text-white sm:text-[3.35rem] sm:leading-[1.08]">
+            로그인 이후 지시, 실행, 승인 흐름을 한 화면에서 통제합니다.
           </h1>
           <p className="max-w-xl text-sm leading-7 text-white/74 sm:text-base">
-            CN EXEFLOW brings authentication, workspace context, approvals, and execution visibility
-            into a single steady experience designed for daily operational flow.
+            CN EXEFLOW는 대표 지시부터 부서 실행, 행동 증빙, 완료 요청, 승인과 결산까지
+            매일 확인해야 할 실행 정보를 차분하게 연결합니다.
           </p>
         </div>
 
@@ -69,9 +67,7 @@ export function BrandPanel() {
               key={item.label}
               className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.04))] p-5 backdrop-blur-xl"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-brand-100/78">
-                {item.label}
-              </p>
+              <p className="text-[11px] font-semibold text-brand-100/78">{item.label}</p>
               <p className="mt-3 text-lg font-semibold text-white">{item.value}</p>
             </div>
           ))}

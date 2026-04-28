@@ -7,8 +7,8 @@ type LoadingOverlayProps = {
 };
 
 export function LoadingOverlay({
-  message = "Preparing CN EXEFLOW",
-  submessage = "We are loading the next workspace view.",
+  message = "화면을 준비하고 있습니다",
+  submessage = "다음 업무 화면을 불러오는 중입니다.",
   useGif = false,
 }: LoadingOverlayProps) {
   if (useGif) {
@@ -44,10 +44,10 @@ export function LoadingOverlay({
             </div>
 
             <div className="space-y-2 opacity-0 animate-[cn-loading-fade_240ms_ease_forwards]">
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-brand-100/80">
+              <p className="text-xs font-semibold text-brand-100/80">
                 CN EXEFLOW
               </p>
-              <p className="text-2xl font-semibold tracking-tight text-white">{message}</p>
+              <p className="text-2xl font-semibold text-white">{message}</p>
               <p className="mx-auto max-w-sm text-sm leading-6 text-white/72">{submessage}</p>
             </div>
           </div>
@@ -83,13 +83,13 @@ export function LoadingOverlay({
             </div>
 
             <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-brand-100">CN EXEFLOW</p>
-              <p className="text-xs text-white/70">Executive workflow control</p>
+              <p className="text-sm font-semibold text-brand-100">CN EXEFLOW</p>
+              <p className="text-xs text-white/70">대표 실행 통제</p>
             </div>
           </div>
 
           <div className="space-y-2 opacity-0 animate-[cn-loading-fade_240ms_ease_forwards]">
-            <p className="text-2xl font-semibold tracking-tight">{message}</p>
+            <p className="text-2xl font-semibold">{message}</p>
             <p className="text-sm leading-6 text-white/72">{submessage}</p>
           </div>
 
@@ -98,9 +98,9 @@ export function LoadingOverlay({
               <div className="h-full w-2/3 rounded-full bg-[linear-gradient(90deg,var(--color-brand-500),#93c5fd)]" />
             </div>
             <div className="grid gap-2 text-xs text-white/62 sm:grid-cols-3">
-              <span>Session context</span>
-              <span>Role routing</span>
-              <span>Workspace sync</span>
+              <span>접속 상태</span>
+              <span>권한 확인</span>
+              <span>업무 동기화</span>
             </div>
           </div>
         </div>

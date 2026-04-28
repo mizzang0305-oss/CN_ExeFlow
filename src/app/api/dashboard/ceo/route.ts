@@ -20,7 +20,7 @@ export async function GET() {
       auditUnauthorizedDashboardApiAccess(session, "/api/dashboard/ceo", ["CEO", "SUPER_ADMIN"]);
       return createApiErrorResponse(403, {
         code: "CEO_DASHBOARD_ACCESS_DENIED",
-        message: "CEO 대시보드는 대표와 슈퍼 관리자만 조회할 수 있습니다.",
+        message: "대표 대시보드는 대표와 슈퍼 관리자만 조회할 수 있습니다.",
       });
     }
 
