@@ -1,6 +1,7 @@
-import { auditUnauthorizedDashboardApiAccess, getCurrentSession } from "@/features/auth";
+import { auditUnauthorizedDashboardApiAccess, getCurrentSession, type AppSession } from "@/features/auth";
 import { isAdminRole } from "@/features/auth/utils";
-import type { DirectiveStatusValue } from "@/lib/constants/status-labels";
+import { listDirectivesForSession, type DirectiveListItem } from "@/features/directives";
+import type { CeoDirectiveQuery, DirectiveStatusValue } from "@/lib/constants/status-labels";
 import { normalizeCeoDirectiveQuery } from "@/lib/constants/status-labels";
 import { createApiErrorResponse, handleApiError } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
@@ -41,6 +42,90 @@ type DirectiveListRow = {
 
 function getJoinedDirective(row: DirectiveListRow) {
   return Array.isArray(row.directives) ? row.directives[0] : row.directives;
+}
+
+function findDepartmentAssignment(item: DirectiveListItem, departmentId: string) {
+  return item.assignedDepartments.find((assignment) => assignment.departmentId === departmentId) ?? null;
+}
+
+function mapFallbackItem(item: DirectiveListItem, departmentId: string) {
+  const assignment = findDepartmentAssignment(item, departmentId);
+
+  if (!assignment) {
+    return null;
+  }
+
+  return {
+    created_at: item.lastActivityAt,
+    directive_no: item.directiveNo,
+    id: item.id,
+    is_urgent: item.isUrgent,
+    status: assignment.departmentStatus,
+    title: item.title,
+    updated_at: item.lastActivityAt,
+    urgent_level: item.urgentLevel,
+  };
+}
+
+async function buildFallbackResponse({
+  department,
+  query,
+  session,
+}: {
+  department: DepartmentRow | null;
+  query: CeoDirectiveQuery;
+  session: AppSession;
+}) {
+  const fallbackResult = await listDirectivesForSession(session, {
+    page: 1,
+    pageSize: 1000,
+  });
+
+  const filteredItems = fallbackResult.items.filter((item) => {
+    const assignment = findDepartmentAssignment(item, query.departmentId);
+
+    if (!assignment) {
+      return false;
+    }
+
+    if (query.status && assignment.departmentStatus === query.status) {
+      return query.urgent ? item.isUrgent : true;
+    }
+
+    if (query.status) {
+      return false;
+    }
+
+    return query.urgent ? item.isUrgent : true;
+  });
+
+  const from = (query.page - 1) * query.limit;
+  const visibleItems = filteredItems.slice(from, from + query.limit);
+  const fallbackDepartmentName =
+    department?.name ??
+    filteredItems
+      .map((item) => findDepartmentAssignment(item, query.departmentId)?.departmentName ?? null)
+      .find((name): name is string => Boolean(name)) ??
+    "선택한 부서";
+
+  return Response.json({
+    department: {
+      id: query.departmentId,
+      name: fallbackDepartmentName,
+    },
+    filter: {
+      status: query.status,
+      urgent: query.urgent,
+    },
+    hasMore: filteredItems.length > from + query.limit,
+    items: visibleItems.flatMap((item) => {
+      const mappedItem = mapFallbackItem(item, query.departmentId);
+
+      return mappedItem ? [mappedItem] : [];
+    }),
+    limit: query.limit,
+    page: query.page,
+  });
 }
 
 export async function GET(request: Request) {
@@ -114,26 +199,30 @@ export async function GET(request: Request) {
         .returns<DirectiveListRow[]>(),
     ]);
 
-    if (departmentResult.error) {
-      throw new ApiError(
-        500,
-        "부서 정보를 불러오지 못했습니다.",
-        departmentResult.error,
-        "CEO_DIRECTIVES_DEPARTMENT_LOAD_FAILED",
-      );
+    if (departmentResult.error || directiveResult.error) {
+      console.error("대표 지시사항 직접 조회 실패", {
+        departmentError: departmentResult.error,
+        directiveError: directiveResult.error,
+      });
+
+      try {
+        return await buildFallbackResponse({
+          department: departmentResult.data ?? null,
+          query,
+          session,
+        });
+      } catch (fallbackError) {
+        throw new ApiError(
+          500,
+          "지시사항을 불러오지 못했습니다.",
+          fallbackError,
+          "CEO_DIRECTIVES_FALLBACK_LOAD_FAILED",
+        );
+      }
     }
 
     if (!departmentResult.data) {
       throw new ApiError(404, "부서를 찾을 수 없습니다.", null, "CEO_DIRECTIVES_DEPARTMENT_NOT_FOUND");
-    }
-
-    if (directiveResult.error) {
-      throw new ApiError(
-        500,
-        "지시사항을 불러오지 못했습니다.",
-        directiveResult.error,
-        "CEO_DIRECTIVES_LOAD_FAILED",
-      );
     }
 
     const rows = (directiveResult.data ?? []) as DirectiveListRow[];
@@ -164,7 +253,7 @@ export async function GET(request: Request) {
             is_urgent: directive.is_urgent,
             status: row.department_status,
             title: directive.title,
-            updated_at: row.updated_at ?? row.assigned_at,
+            updated_at: row.updated_at ?? row.assigned_at ?? row.created_at,
             urgent_level: directive.urgent_level,
           },
         ];
