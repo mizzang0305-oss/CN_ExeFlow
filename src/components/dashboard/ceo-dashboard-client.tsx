@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { CeoDashboardData, DepartmentAnalysisItem } from "@/features/dashboard";
 import type { DirectiveStatusValue } from "@/lib/constants/status-labels";
@@ -119,22 +118,65 @@ function compareRisk(left: DepartmentAnalysisItem, right: DepartmentAnalysisItem
   return right.totalCount - left.totalCount;
 }
 
-export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+type UrlSelection = {
+  departmentId: string | null;
+  status: DirectiveStatusValue | null;
+  urgent: boolean;
+};
 
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(() =>
-    searchParams.get("departmentId"),
-  );
-  const [selectedStatus, setSelectedStatus] = useState<DirectiveStatusValue | null>(() =>
-    normalizeDirectiveStatus(searchParams.get("status")),
-  );
-  const [urgentOnly, setUrgentOnly] = useState(() =>
-    normalizeUrgentQueryValue(searchParams.get("urgent")),
-  );
+function readSelectionFromUrl(): UrlSelection {
+  if (typeof window === "undefined") {
+    return {
+      departmentId: null,
+      status: null,
+      urgent: false,
+    };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const urgent = normalizeUrgentQueryValue(params.get("urgent"));
+
+  return {
+    departmentId: params.get("departmentId"),
+    status: urgent ? null : normalizeDirectiveStatus(params.get("status")),
+    urgent,
+  };
+}
+
+function replaceUrlSilently(
+  departmentId: string | null,
+  status: DirectiveStatusValue | null,
+  urgent: boolean,
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const params = new URLSearchParams();
+
+  if (departmentId) {
+    params.set("departmentId", departmentId);
+  }
+
+  if (status) {
+    params.set("status", status);
+  }
+
+  if (urgent) {
+    params.set("urgent", "true");
+  }
+
+  const nextQuery = params.toString();
+  const nextUrl = nextQuery ? `${window.location.pathname}?${nextQuery}` : window.location.pathname;
+  window.history.replaceState(null, "", nextUrl);
+}
+
+export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<DirectiveStatusValue | null>(null);
+  const [urgentOnly, setUrgentOnly] = useState(false);
   const [page, setPage] = useState(1);
-  const detailPanelRef = useRef<HTMLDivElement | null>(null);
+  const detailPanelRef = useRef<HTMLElement | null>(null);
 
   const selectedDepartment = useMemo(
     () => data.departments.find((department) => department.departmentId === selectedDepartmentId) ?? null,
@@ -157,37 +199,15 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     urgent: urgentOnly,
   });
 
-  const updateUrl = useCallback(
-    (departmentId: string | null, status: DirectiveStatusValue | null, urgent: boolean) => {
-      const nextParams = new URLSearchParams();
-
-      if (departmentId) {
-        nextParams.set("departmentId", departmentId);
-      }
-
-      if (status) {
-        nextParams.set("status", status);
-      }
-
-      if (urgent) {
-        nextParams.set("urgent", "true");
-      }
-
-      const query = nextParams.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-    },
-    [pathname, router],
-  );
-
   const selectDepartment = useCallback(
     (departmentId: string) => {
       setSelectedDepartmentId(departmentId);
       setSelectedStatus(null);
       setUrgentOnly(false);
       setPage(1);
-      updateUrl(departmentId, null, false);
+      replaceUrlSilently(departmentId, null, false);
     },
-    [updateUrl],
+    [],
   );
 
   const selectStatus = useCallback(
@@ -196,9 +216,9 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
       setSelectedStatus(urgent ? null : status);
       setUrgentOnly(urgent);
       setPage(1);
-      updateUrl(departmentId, urgent ? null : status, urgent);
+      replaceUrlSilently(departmentId, urgent ? null : status, urgent);
     },
-    [updateUrl],
+    [],
   );
 
   const prefetchDepartment = useCallback(
@@ -215,18 +235,20 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
   );
 
   useEffect(() => {
-    const departmentId = searchParams.get("departmentId");
-    const status = normalizeDirectiveStatus(searchParams.get("status"));
-    const urgent = normalizeUrgentQueryValue(searchParams.get("urgent"));
-    const timer = window.setTimeout(() => {
+    const applyUrlSelection = () => {
+      const { departmentId, status, urgent } = readSelectionFromUrl();
+
       setSelectedDepartmentId(departmentId);
-      setSelectedStatus(urgent ? null : status);
+      setSelectedStatus(status);
       setUrgentOnly(urgent);
       setPage(1);
-    }, 0);
+    };
 
-    return () => window.clearTimeout(timer);
-  }, [searchParams]);
+    applyUrlSelection();
+    window.addEventListener("popstate", applyUrlSelection);
+
+    return () => window.removeEventListener("popstate", applyUrlSelection);
+  }, []);
 
   useEffect(() => {
     const targets = [...data.departments].sort(compareRisk).slice(0, 3);
@@ -297,7 +319,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
           <div
             className={cn(
               selectedDepartmentId
-                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(390px,480px)] 2xl:grid-cols-[minmax(0,1.25fr)_minmax(460px,560px)]"
+                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(420px,520px)] 2xl:grid-cols-[minmax(0,1.25fr)_minmax(480px,580px)]"
                 : "grid gap-5",
             )}
           >
@@ -322,7 +344,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
             </div>
 
             {selectedDepartmentId ? (
-              <div ref={detailPanelRef} className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+              <aside ref={detailPanelRef} className="min-w-0 lg:sticky lg:top-4 lg:self-start">
                 <DepartmentDirectivePanel
                   data={directivesData}
                   department={selectedDepartment}
@@ -344,7 +366,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
                   status={selectedStatus}
                   urgent={urgentOnly}
                 />
-              </div>
+              </aside>
             ) : null}
           </div>
         )}

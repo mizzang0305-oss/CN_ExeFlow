@@ -150,6 +150,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
     ? buildDepartmentDirectiveCacheKey(normalizedRequest)
     : null;
   const abortRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
 
   const [state, setState] = useState<HookState>(() => ({
     cacheKey,
@@ -195,6 +196,8 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
 
       abortRef.current?.abort();
       const controller = new AbortController();
+      const requestSeq = requestSeqRef.current + 1;
+      requestSeqRef.current = requestSeq;
       abortRef.current = controller;
 
       try {
@@ -204,7 +207,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
           await waitForMinimumLoading(loadingStartedAt);
         }
 
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || requestSeqRef.current !== requestSeq) {
           return null;
         }
 
@@ -218,7 +221,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
         });
         return data;
       } catch (error) {
-        if (controller.signal.aborted) {
+        if (controller.signal.aborted || requestSeqRef.current !== requestSeq) {
           return null;
         }
 

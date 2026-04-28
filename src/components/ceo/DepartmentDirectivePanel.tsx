@@ -63,6 +63,8 @@ export function DepartmentDirectivePanel({
   const departmentName = data?.department.name ?? department?.departmentName ?? "선택한 부서";
   const itemCount = data?.items.length ?? 0;
   const showLoadingStrip = isLoading || isRefreshing;
+  const showBlockingError = Boolean(error && !data && !isLoading);
+  const totalText = data ? `총 표시 ${itemCount}건` : error ? "총 표시 확인 불가" : "총 표시 확인 중";
 
   return (
     <section className="detail-panel-enter scroll-mt-4 rounded-[30px] border border-brand-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.94))] p-5 shadow-[0_26px_70px_rgba(6,18,38,0.11)] sm:p-6 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
@@ -81,7 +83,7 @@ export function DepartmentDirectivePanel({
         <div>
           <h2 className="text-3xl font-bold text-ink-950">{departmentName} 지시사항</h2>
           <p className="mt-2 text-base font-semibold text-ink-700">{getSubtitle(status, urgent)}</p>
-          <p className="mt-2 text-sm font-bold text-ink-600">{`총 표시 ${itemCount}건`}</p>
+          <p className="mt-2 text-sm font-bold text-ink-600">{totalText}</p>
         </div>
 
         <StatusFilterBar currentStatus={status} currentUrgent={urgent} onChange={onFilterChange} />
@@ -109,7 +111,7 @@ export function DepartmentDirectivePanel({
       <div className="mt-6">
         {isLoading && !data ? <DirectiveListSkeleton /> : null}
 
-        {error && !isLoading ? (
+        {showBlockingError ? (
           <ErrorState
             title="지시사항을 불러오지 못했습니다."
             description="잠시 후 다시 시도해주세요."
@@ -121,14 +123,14 @@ export function DepartmentDirectivePanel({
           />
         ) : null}
 
-        {!error && data && data.items.length === 0 ? (
+        {!showBlockingError && data && data.items.length === 0 ? (
           <EmptyState
             title="표시할 지시사항이 없습니다."
             description="다른 상태를 선택해 확인해보세요."
           />
         ) : null}
 
-        {!error && data && data.items.length > 0 ? <DirectiveList items={data.items} /> : null}
+        {!showBlockingError && data && data.items.length > 0 ? <DirectiveList items={data.items} /> : null}
       </div>
 
       {data ? (
