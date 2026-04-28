@@ -44,18 +44,22 @@ export const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
 
 const statusSet = new Set<string>(DIRECTIVE_STATUS_VALUES);
 
+export type CeoDirectiveScope = "global" | "department";
+
 export type CeoDirectiveQuery = {
-  departmentId: string;
+  departmentId: string | null;
   limit: number;
   page: number;
+  scope: CeoDirectiveScope;
   status: DirectiveStatusValue | null;
   urgent: boolean;
 };
 
 export type DepartmentDirectiveCacheKeyInput = {
-  departmentId: string;
+  departmentId: string | null;
   limit: number;
   page: number;
+  scope: CeoDirectiveScope;
   status: DirectiveStatusValue | null;
   urgent: boolean;
 };
@@ -78,14 +82,16 @@ export function normalizeUrgentQueryValue(value: string | null | undefined) {
 }
 
 export function normalizeCeoDirectiveQuery(searchParams: URLSearchParams): CeoDirectiveQuery {
-  const departmentId = searchParams.get("departmentId")?.trim() ?? "";
+  const departmentId = searchParams.get("departmentId")?.trim() || null;
   const page = normalizePositiveInteger(searchParams.get("page"), 1);
   const requestedLimit = normalizePositiveInteger(searchParams.get("limit"), 50);
+  const scope = searchParams.get("scope") === "global" ? "global" : "department";
 
   return {
     departmentId,
     limit: Math.min(requestedLimit, 100),
     page,
+    scope,
     status: normalizeDirectiveStatus(searchParams.get("status")),
     urgent: normalizeUrgentQueryValue(searchParams.get("urgent")),
   };
@@ -95,10 +101,11 @@ export function buildDepartmentDirectiveCacheKey({
   departmentId,
   limit,
   page,
+  scope,
   status,
   urgent,
 }: DepartmentDirectiveCacheKeyInput) {
-  return `${departmentId}|${status ?? "ALL"}|${urgent}|${page}|${limit}`;
+  return `${scope}|${departmentId ?? "ALL"}|${status ?? "ALL"}|${urgent}|${page}|${limit}`;
 }
 
 export function getDirectiveStatusLabel(status: string) {

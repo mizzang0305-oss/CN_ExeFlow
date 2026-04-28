@@ -18,6 +18,7 @@ type DepartmentDirectivePanelProps = {
   error: string | null;
   isLoading: boolean;
   isRefreshing: boolean;
+  mode: "global" | "department";
   onFilterChange: (status: DirectiveStatusValue | null, urgent: boolean) => void;
   onPageChange: (page: number) => void;
   onRefetch: () => void;
@@ -26,25 +27,73 @@ type DepartmentDirectivePanelProps = {
   urgent: boolean;
 };
 
-const STATUS_SUBTITLE: Record<DirectiveStatusValue, string> = {
-  COMPLETED: "완료 지시사항만 표시하고 있습니다.",
-  COMPLETION_REQUESTED: "승인 대기 지시사항만 표시하고 있습니다.",
-  DELAYED: "지연 지시사항만 표시하고 있습니다.",
-  IN_PROGRESS: "진행중 지시사항만 표시하고 있습니다.",
-  NEW: "신규 지시사항만 표시하고 있습니다.",
-  REJECTED: "반려 지시사항만 표시하고 있습니다.",
+const GLOBAL_TITLE: Record<DirectiveStatusValue, string> = {
+  COMPLETED: "전체 완료 지시사항",
+  COMPLETION_REQUESTED: "전체 승인 대기 지시사항",
+  DELAYED: "전체 지연 지시사항",
+  IN_PROGRESS: "전체 진행중 지시사항",
+  NEW: "전체 신규 지시사항",
+  REJECTED: "전체 반려 지시사항",
 };
 
-function getSubtitle(status: DirectiveStatusValue | null, urgent: boolean) {
+const GLOBAL_SUBTITLE: Record<DirectiveStatusValue, string> = {
+  COMPLETED: "전체 완료 지시사항을 표시하고 있습니다.",
+  COMPLETION_REQUESTED: "전체 승인 대기 지시사항을 표시하고 있습니다.",
+  DELAYED: "전체 지연 지시사항을 표시하고 있습니다.",
+  IN_PROGRESS: "전체 진행중 지시사항을 표시하고 있습니다.",
+  NEW: "전체 신규 지시사항을 표시하고 있습니다.",
+  REJECTED: "전체 반려 지시사항을 표시하고 있습니다.",
+};
+
+const DEPARTMENT_SUBTITLE: Record<DirectiveStatusValue, string> = {
+  COMPLETED: "해당 부서의 완료 지시사항만 표시하고 있습니다.",
+  COMPLETION_REQUESTED: "해당 부서의 승인 대기 지시사항만 표시하고 있습니다.",
+  DELAYED: "해당 부서의 지연 지시사항만 표시하고 있습니다.",
+  IN_PROGRESS: "해당 부서의 진행중 지시사항만 표시하고 있습니다.",
+  NEW: "해당 부서의 신규 지시사항만 표시하고 있습니다.",
+  REJECTED: "해당 부서의 반려 지시사항만 표시하고 있습니다.",
+};
+
+function getTitle({
+  departmentName,
+  mode,
+  status,
+  urgent,
+}: {
+  departmentName: string;
+  mode: "global" | "department";
+  status: DirectiveStatusValue | null;
+  urgent: boolean;
+}) {
+  if (mode === "department") {
+    return `${departmentName} 지시사항`;
+  }
+
   if (urgent) {
-    return "긴급 지시사항만 표시하고 있습니다.";
+    return "전체 긴급 지시사항";
   }
 
   if (status) {
-    return STATUS_SUBTITLE[status];
+    return GLOBAL_TITLE[status];
   }
 
-  return "전체 지시사항을 표시하고 있습니다.";
+  return "전체 지시사항";
+}
+
+function getSubtitle(mode: "global" | "department", status: DirectiveStatusValue | null, urgent: boolean) {
+  if (urgent) {
+    return mode === "global"
+      ? "전체 긴급 지시사항을 표시하고 있습니다."
+      : "해당 부서의 긴급 지시사항만 표시하고 있습니다.";
+  }
+
+  if (status) {
+    return mode === "global" ? GLOBAL_SUBTITLE[status] : DEPARTMENT_SUBTITLE[status];
+  }
+
+  return mode === "global"
+    ? "전체 지시사항을 표시하고 있습니다."
+    : "해당 부서의 전체 지시사항을 표시하고 있습니다.";
 }
 
 export function DepartmentDirectivePanel({
@@ -53,6 +102,7 @@ export function DepartmentDirectivePanel({
   error,
   isLoading,
   isRefreshing,
+  mode,
   onFilterChange,
   onPageChange,
   onRefetch,
@@ -60,7 +110,10 @@ export function DepartmentDirectivePanel({
   status,
   urgent,
 }: DepartmentDirectivePanelProps) {
-  const departmentName = data?.department.name ?? department?.departmentName ?? "선택한 부서";
+  const departmentName = mode === "department"
+    ? department?.departmentName ?? data?.department.name ?? "선택한 부서"
+    : data?.department.name ?? "전체";
+  const title = getTitle({ departmentName, mode, status, urgent });
   const itemCount = data?.items.length ?? 0;
   const showLoadingStrip = isLoading || isRefreshing;
   const showBlockingError = Boolean(error && !data && !isLoading);
@@ -81,8 +134,8 @@ export function DepartmentDirectivePanel({
         </div>
 
         <div>
-          <h2 className="text-3xl font-bold text-ink-950">{departmentName} 지시사항</h2>
-          <p className="mt-2 text-base font-semibold text-ink-700">{getSubtitle(status, urgent)}</p>
+          <h2 className="text-3xl font-bold text-ink-950">{title}</h2>
+          <p className="mt-2 text-base font-semibold text-ink-700">{getSubtitle(mode, status, urgent)}</p>
           <p className="mt-2 text-sm font-bold text-ink-600">{totalText}</p>
         </div>
 

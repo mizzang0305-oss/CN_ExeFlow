@@ -21,8 +21,11 @@ type CeoDashboardClientProps = {
 
 type SummaryCard = {
   accentClassName: string;
+  ariaLabel: string;
   label: string;
   shape: "bar" | "circle" | "diamond" | "ring" | "square" | "warning";
+  status: DirectiveStatusValue | null;
+  urgent: boolean;
   value: string;
 };
 
@@ -32,38 +35,56 @@ function buildSummaryCards(data: CeoDashboardData): SummaryCard[] {
   return [
     {
       accentClassName: "bg-brand-700",
+      ariaLabel: "전체 지시사항 보기",
       label: "전체 지시 건수",
       shape: "square",
+      status: null,
+      urgent: false,
       value: `${summary.totalCount}`,
     },
     {
       accentClassName: "bg-brand-600",
+      ariaLabel: "전체 진행중 지시사항 보기",
       label: "진행중",
       shape: "bar",
+      status: "IN_PROGRESS",
+      urgent: false,
       value: `${summary.inProgressCount}`,
     },
     {
       accentClassName: "bg-warning-600",
+      ariaLabel: "전체 승인 대기 지시사항 보기",
       label: "승인 대기",
       shape: "ring",
+      status: "COMPLETION_REQUESTED",
+      urgent: false,
       value: `${summary.waitingApprovalCount}`,
     },
     {
       accentClassName: "bg-danger-600",
+      ariaLabel: "전체 지연 지시사항 보기",
       label: "지연",
       shape: "diamond",
+      status: "DELAYED",
+      urgent: false,
       value: `${summary.delayedCount}`,
     },
     {
       accentClassName: "bg-danger-700",
+      ariaLabel: "전체 긴급 지시사항 보기",
       label: "긴급",
       shape: "warning",
+      status: null,
+      urgent: true,
       value: `${summary.urgentCount}`,
     },
     {
       accentClassName: "bg-success-600",
+      ariaLabel: "전체 완료 지시사항 보기",
       label: "완료율",
       shape: "circle",
+      status: "COMPLETED",
+      urgent: false,
       value: `${summary.completionRate}%`,
     },
   ];
@@ -118,8 +139,11 @@ function compareRisk(left: DepartmentAnalysisItem, right: DepartmentAnalysisItem
   return right.totalCount - left.totalCount;
 }
 
+type SelectedScope = "none" | "global" | "department";
+
 type UrlSelection = {
   departmentId: string | null;
+  scope: SelectedScope;
   status: DirectiveStatusValue | null;
   urgent: boolean;
 };
@@ -128,6 +152,7 @@ function readSelectionFromUrl(): UrlSelection {
   if (typeof window === "undefined") {
     return {
       departmentId: null,
+      scope: "none",
       status: null,
       urgent: false,
     };
@@ -135,24 +160,41 @@ function readSelectionFromUrl(): UrlSelection {
 
   const params = new URLSearchParams(window.location.search);
   const urgent = normalizeUrgentQueryValue(params.get("urgent"));
+  const departmentId = params.get("departmentId");
+  const scope = params.get("scope") === "global"
+    ? "global"
+    : departmentId
+      ? "department"
+      : "none";
 
   return {
-    departmentId: params.get("departmentId"),
+    departmentId: scope === "department" ? departmentId : null,
+    scope,
     status: urgent ? null : normalizeDirectiveStatus(params.get("status")),
     urgent,
   };
 }
 
-function replaceUrlSilently(
-  departmentId: string | null,
-  status: DirectiveStatusValue | null,
-  urgent: boolean,
-) {
+function replaceUrlSilently({
+  departmentId,
+  scope,
+  status,
+  urgent,
+}: {
+  departmentId: string | null;
+  scope: SelectedScope;
+  status: DirectiveStatusValue | null;
+  urgent: boolean;
+}) {
   if (typeof window === "undefined") {
     return;
   }
 
   const params = new URLSearchParams();
+
+  if (scope === "global") {
+    params.set("scope", "global");
+  }
 
   if (departmentId) {
     params.set("departmentId", departmentId);
@@ -172,6 +214,7 @@ function replaceUrlSilently(
 }
 
 export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
+  const [selectedScope, setSelectedScope] = useState<SelectedScope>("none");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<DirectiveStatusValue | null>(null);
   const [urgentOnly, setUrgentOnly] = useState(false);
@@ -183,6 +226,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     [data.departments, selectedDepartmentId],
   );
   const summaryCards = useMemo(() => buildSummaryCards(data), [data]);
+  const shouldShowPanel = selectedScope !== "none";
 
   const {
     data: directivesData,
@@ -192,34 +236,61 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     prefetch,
     refetch,
   } = useDepartmentDirectives({
-    departmentId: selectedDepartmentId,
+    departmentId: selectedScope === "department" ? selectedDepartmentId : null,
     limit: 50,
     page,
+    scope: selectedScope,
     status: selectedStatus,
     urgent: urgentOnly,
   });
 
   const selectDepartment = useCallback(
     (departmentId: string) => {
+      setSelectedScope("department");
       setSelectedDepartmentId(departmentId);
       setSelectedStatus(null);
       setUrgentOnly(false);
       setPage(1);
-      replaceUrlSilently(departmentId, null, false);
+      replaceUrlSilently({
+        departmentId,
+        scope: "department",
+        status: null,
+        urgent: false,
+      });
     },
     [],
   );
 
-  const selectStatus = useCallback(
+  const selectDepartmentStatus = useCallback(
     (departmentId: string, status: DirectiveStatusValue | null, urgent = false) => {
+      setSelectedScope("department");
       setSelectedDepartmentId(departmentId);
       setSelectedStatus(urgent ? null : status);
       setUrgentOnly(urgent);
       setPage(1);
-      replaceUrlSilently(departmentId, urgent ? null : status, urgent);
+      replaceUrlSilently({
+        departmentId,
+        scope: "department",
+        status: urgent ? null : status,
+        urgent,
+      });
     },
     [],
   );
+
+  const selectGlobalStatus = useCallback((status: DirectiveStatusValue | null, urgent = false) => {
+    setSelectedScope("global");
+    setSelectedDepartmentId(null);
+    setSelectedStatus(urgent ? null : status);
+    setUrgentOnly(urgent);
+    setPage(1);
+    replaceUrlSilently({
+      departmentId: null,
+      scope: "global",
+      status: urgent ? null : status,
+      urgent,
+    });
+  }, []);
 
   const prefetchDepartment = useCallback(
     (departmentId: string, status?: DirectiveStatusValue | null, urgent = false) => {
@@ -227,7 +298,22 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
         departmentId,
         limit: 50,
         page: 1,
+        scope: "department",
         status: urgent ? null : status ?? null,
+        urgent,
+      });
+    },
+    [prefetch],
+  );
+
+  const prefetchGlobalStatus = useCallback(
+    (status: DirectiveStatusValue | null, urgent = false) => {
+      void prefetch({
+        departmentId: null,
+        limit: 50,
+        page: 1,
+        scope: "global",
+        status: urgent ? null : status,
         urgent,
       });
     },
@@ -236,8 +322,9 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
 
   useEffect(() => {
     const applyUrlSelection = () => {
-      const { departmentId, status, urgent } = readSelectionFromUrl();
+      const { departmentId, scope, status, urgent } = readSelectionFromUrl();
 
+      setSelectedScope(scope);
       setSelectedDepartmentId(departmentId);
       setSelectedStatus(status);
       setUrgentOnly(urgent);
@@ -259,6 +346,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
           departmentId: department.departmentId,
           limit: 50,
           page: 1,
+          scope: "department",
           status: null,
           urgent: false,
         });
@@ -269,7 +357,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
   }, [data.departments, prefetch]);
 
   useEffect(() => {
-    if (!selectedDepartmentId) {
+    if (!shouldShowPanel) {
       return;
     }
 
@@ -280,23 +368,42 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [selectedDepartmentId, selectedStatus, urgentOnly]);
+  }, [shouldShowPanel, selectedDepartmentId, selectedStatus, urgentOnly]);
 
   return (
     <div className="space-y-7">
       <section aria-label="상단 요약 영역" className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        {summaryCards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-[24px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-base font-bold text-ink-700">{card.label}</p>
-              <SummaryShape className={card.accentClassName} shape={card.shape} />
-            </div>
-            <p className="mt-4 text-5xl font-bold text-ink-950">{card.value}</p>
-          </div>
-        ))}
+        {summaryCards.map((card) => {
+          const isActive = selectedScope === "global" && selectedStatus === card.status && urgentOnly === card.urgent;
+
+          return (
+            <button
+              key={card.label}
+              type="button"
+              aria-label={card.ariaLabel}
+              aria-pressed={isActive}
+              onClick={() => selectGlobalStatus(card.status, card.urgent)}
+              onPointerEnter={() => prefetchGlobalStatus(card.status, card.urgent)}
+              className={cn(
+                "executive-click-target rounded-[24px] border border-white/80 bg-white px-5 py-5 text-left shadow-[0_18px_42px_rgba(6,18,38,0.08)]",
+                isActive && "border-brand-900 bg-brand-50 ring-4 ring-brand-100",
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-ink-700">{card.label}</p>
+                  {isActive ? (
+                    <span className="mt-2 inline-flex rounded-full bg-brand-900 px-3 py-1 text-xs font-bold text-white">
+                      선택됨
+                    </span>
+                  ) : null}
+                </div>
+                <SummaryShape className={card.accentClassName} shape={card.shape} />
+              </div>
+              <p className="mt-4 text-5xl font-bold text-ink-950">{card.value}</p>
+            </button>
+          );
+        })}
       </section>
 
       <section aria-label="부서 현황" className="space-y-4">
@@ -318,15 +425,15 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
         ) : (
           <div
             className={cn(
-              selectedDepartmentId
-                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(420px,520px)] 2xl:grid-cols-[minmax(0,1.25fr)_minmax(480px,580px)]"
+              shouldShowPanel
+                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(430px,560px)]"
                 : "grid gap-5",
             )}
           >
             <div
               className={cn(
                 "grid gap-4",
-                selectedDepartmentId ? "xl:grid-cols-1 2xl:grid-cols-2" : "xl:grid-cols-2 2xl:grid-cols-3",
+                shouldShowPanel ? "md:grid-cols-2 xl:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3",
               )}
             >
               {data.departments.map((department) => (
@@ -338,25 +445,26 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
                   isSelected={selectedDepartmentId === department.departmentId}
                   onPrefetch={prefetchDepartment}
                   onSelect={selectDepartment}
-                  onStatusSelect={selectStatus}
+                  onStatusSelect={selectDepartmentStatus}
                 />
               ))}
             </div>
 
-            {selectedDepartmentId ? (
-              <aside ref={detailPanelRef} className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+            {shouldShowPanel ? (
+              <aside ref={detailPanelRef} className="min-w-0 lg:sticky lg:top-5 lg:self-start">
                 <DepartmentDirectivePanel
                   data={directivesData}
                   department={selectedDepartment}
                   error={directivesError}
                   isLoading={directivesLoading}
                   isRefreshing={directivesRefreshing}
+                  mode={selectedScope === "global" ? "global" : "department"}
                   onFilterChange={(status, urgent) => {
-                    if (!selectedDepartmentId) {
-                      return;
+                    if (selectedScope === "global") {
+                      selectGlobalStatus(status, urgent);
+                    } else if (selectedDepartmentId) {
+                      selectDepartmentStatus(selectedDepartmentId, status, urgent);
                     }
-
-                    selectStatus(selectedDepartmentId, status, urgent);
                   }}
                   onPageChange={(nextPage) => setPage(nextPage)}
                   onRefetch={() => {

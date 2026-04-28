@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   buildDepartmentDirectiveCacheKey,
+  type CeoDirectiveScope,
   type DirectiveStatusValue,
 } from "@/lib/constants/status-labels";
 
@@ -37,6 +38,7 @@ export type DepartmentDirectiveRequest = {
   departmentId: string | null;
   limit?: number;
   page?: number;
+  scope?: CeoDirectiveScope | "none";
   status?: DirectiveStatusValue | null;
   urgent?: boolean;
 };
@@ -54,21 +56,37 @@ const prefetchRequests = new Map<string, Promise<DepartmentDirectivesResponse | 
 const MIN_VISIBLE_LOADING_MS = 420;
 
 function normalizeRequest(request: DepartmentDirectiveRequest) {
+  const scope = request.scope ?? (request.departmentId ? "department" : "none");
+
   return {
     departmentId: request.departmentId ?? "",
     limit: request.limit ?? 50,
     page: request.page ?? 1,
+    scope,
     status: request.status ?? null,
     urgent: request.urgent === true,
   };
 }
 
+function canFetchRequest(
+  request: ReturnType<typeof normalizeRequest>,
+): request is ReturnType<typeof normalizeRequest> & { scope: CeoDirectiveScope } {
+  return request.scope !== "none" && (request.scope === "global" || Boolean(request.departmentId));
+}
+
 function buildRequestUrl(request: ReturnType<typeof normalizeRequest>) {
   const params = new URLSearchParams({
-    departmentId: request.departmentId,
     limit: String(request.limit),
     page: String(request.page),
   });
+
+  if (request.scope !== "none") {
+    params.set("scope", request.scope);
+  }
+
+  if (request.departmentId) {
+    params.set("departmentId", request.departmentId);
+  }
 
   if (request.status) {
     params.set("status", request.status);
@@ -141,12 +159,13 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
       departmentId: request.departmentId ?? "",
       limit: request.limit ?? 50,
       page: request.page ?? 1,
+      scope: request.scope ?? (request.departmentId ? "department" : "none"),
       status: request.status ?? null,
       urgent: request.urgent === true,
     }),
-    [request.departmentId, request.limit, request.page, request.status, request.urgent],
+    [request.departmentId, request.limit, request.page, request.scope, request.status, request.urgent],
   );
-  const cacheKey = normalizedRequest.departmentId
+  const cacheKey = canFetchRequest(normalizedRequest)
     ? buildDepartmentDirectiveCacheKey(normalizedRequest)
     : null;
   const abortRef = useRef<AbortController | null>(null);
@@ -162,7 +181,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
 
   const load = useCallback(
     async () => {
-      if (!cacheKey || !normalizedRequest.departmentId) {
+      if (!cacheKey || normalizedRequest.scope === "none") {
         setState({
           cacheKey: null,
           data: null,
@@ -249,7 +268,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
   const prefetch = useCallback((nextRequest: DepartmentDirectiveRequest) => {
     const normalizedNextRequest = normalizeRequest(nextRequest);
 
-    if (!normalizedNextRequest.departmentId) {
+    if (!canFetchRequest(normalizedNextRequest)) {
       return Promise.resolve(null);
     }
 
