@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
 
 import type { DepartmentAnalysisItem } from "@/features/dashboard";
 import type { DirectiveStatusValue } from "@/lib/constants/status-labels";
@@ -16,6 +16,13 @@ type DepartmentProgressCardProps = {
   onStatusSelect: (departmentId: string, status: DirectiveStatusValue | null, urgent?: boolean) => void;
 };
 
+type StatusMetric = {
+  count: number;
+  label: string;
+  status: DirectiveStatusValue;
+  tone: "danger" | "neutral" | "success";
+};
+
 function getRisk(department: DepartmentAnalysisItem) {
   if (department.delayedCount > 0 || department.urgentCount > 0) {
     return {
@@ -29,7 +36,7 @@ function getRisk(department: DepartmentAnalysisItem) {
     return {
       className: "border-warning-200 bg-warning-50 text-warning-700",
       label: "주의",
-      marker: "·",
+      marker: "•",
     };
   }
 
@@ -61,6 +68,27 @@ function chipClass(isActive: boolean, tone: "danger" | "warning") {
   );
 }
 
+function statusButtonClass(isActive: boolean, tone: StatusMetric["tone"]) {
+  const base =
+    "management-clickable min-h-[4.75rem] rounded-[18px] border px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300";
+
+  if (isActive) {
+    return cn(
+      base,
+      tone === "success" && "border-success-700 bg-success-700 text-white shadow-[0_16px_32px_rgba(22,163,74,0.18)]",
+      tone === "danger" && "border-danger-700 bg-danger-700 text-white shadow-[0_16px_32px_rgba(220,38,38,0.2)]",
+      tone === "neutral" && "border-brand-800 bg-brand-800 text-white shadow-[0_16px_32px_rgba(37,99,235,0.18)]",
+    );
+  }
+
+  return cn(
+    base,
+    tone === "success" && "border-success-200 bg-success-50 text-success-700 hover:bg-success-100",
+    tone === "danger" && "border-danger-200 bg-danger-50 text-danger-700 hover:bg-danger-100",
+    tone === "neutral" && "border-ink-200 bg-ink-50 text-ink-950 hover:bg-brand-50",
+  );
+}
+
 export function DepartmentProgressCard({
   activeStatus,
   activeUrgent,
@@ -71,15 +99,40 @@ export function DepartmentProgressCard({
   onStatusSelect,
 }: DepartmentProgressCardProps) {
   const risk = getRisk(department);
+  const completionRate = Math.max(0, Math.min(100, department.completionRate));
+  const statusMetrics: StatusMetric[] = [
+    {
+      count: department.inProgressCount,
+      label: "진행중",
+      status: "IN_PROGRESS",
+      tone: "neutral",
+    },
+    {
+      count: department.completedCount,
+      label: "완료",
+      status: "COMPLETED",
+      tone: "success",
+    },
+    {
+      count: department.rejectedCount,
+      label: "반려",
+      status: "REJECTED",
+      tone: "danger",
+    },
+  ];
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onSelect(department.departmentId);
     }
   };
 
-  const handleChipClick = (
+  const handleStatusClick = (
     event: MouseEvent<HTMLButtonElement>,
     status: DirectiveStatusValue | null,
     urgent = false,
@@ -88,7 +141,14 @@ export function DepartmentProgressCard({
     onStatusSelect(department.departmentId, status, urgent);
   };
 
-  const completionRate = Math.max(0, Math.min(100, department.completionRate));
+  const handleStatusPrefetch = (
+    event: MouseEvent<HTMLButtonElement> | PointerEvent<HTMLButtonElement>,
+    status: DirectiveStatusValue | null,
+    urgent = false,
+  ) => {
+    event.stopPropagation();
+    onPrefetch(department.departmentId, status, urgent);
+  };
 
   return (
     <div
@@ -144,29 +204,31 @@ export function DepartmentProgressCard({
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-2">
-        <div className="rounded-[18px] border border-ink-200 bg-ink-50 px-3 py-3">
-          <p className="text-xs font-bold text-ink-600">진행중</p>
-          <p className="mt-1 text-2xl font-bold text-ink-950">{department.inProgressCount}</p>
-        </div>
-        <div className="rounded-[18px] border border-success-200 bg-success-50 px-3 py-3">
-          <p className="text-xs font-bold text-success-700">완료</p>
-          <p className="mt-1 text-2xl font-bold text-success-700">{department.completedCount}</p>
-        </div>
-        <div className="rounded-[18px] border border-danger-200 bg-danger-50 px-3 py-3">
-          <p className="text-xs font-bold text-danger-700">반려</p>
-          <p className="mt-1 text-2xl font-bold text-danger-700">{department.rejectedCount}</p>
-        </div>
+        {statusMetrics.map((metric) => {
+          const isActive = isSelected && activeStatus === metric.status && !activeUrgent;
+
+          return (
+            <button
+              key={metric.status}
+              type="button"
+              aria-label={`${department.departmentName} ${metric.label} 지시사항 보기`}
+              onClick={(event) => handleStatusClick(event, metric.status)}
+              onPointerEnter={(event) => handleStatusPrefetch(event, metric.status)}
+              className={statusButtonClass(isActive, metric.tone)}
+            >
+              <span className="block text-xs font-bold">{metric.label}</span>
+              <span className="mt-1 block text-2xl font-bold">{metric.count}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
         <button
           type="button"
           aria-label={`${department.departmentName} 승인 대기 지시사항 보기`}
-          onClick={(event) => handleChipClick(event, "COMPLETION_REQUESTED")}
-          onPointerEnter={(event) => {
-            event.stopPropagation();
-            onPrefetch(department.departmentId, "COMPLETION_REQUESTED");
-          }}
+          onClick={(event) => handleStatusClick(event, "COMPLETION_REQUESTED")}
+          onPointerEnter={(event) => handleStatusPrefetch(event, "COMPLETION_REQUESTED")}
           className={chipClass(isSelected && activeStatus === "COMPLETION_REQUESTED" && !activeUrgent, "warning")}
         >
           <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-current" />
@@ -175,11 +237,8 @@ export function DepartmentProgressCard({
         <button
           type="button"
           aria-label={`${department.departmentName} 지연 지시사항 보기`}
-          onClick={(event) => handleChipClick(event, "DELAYED")}
-          onPointerEnter={(event) => {
-            event.stopPropagation();
-            onPrefetch(department.departmentId, "DELAYED");
-          }}
+          onClick={(event) => handleStatusClick(event, "DELAYED")}
+          onPointerEnter={(event) => handleStatusPrefetch(event, "DELAYED")}
           className={chipClass(isSelected && activeStatus === "DELAYED" && !activeUrgent, "danger")}
         >
           <span aria-hidden="true" className="h-3 w-3 rotate-45 bg-current" />
@@ -188,11 +247,8 @@ export function DepartmentProgressCard({
         <button
           type="button"
           aria-label={`${department.departmentName} 긴급 지시사항 보기`}
-          onClick={(event) => handleChipClick(event, null, true)}
-          onPointerEnter={(event) => {
-            event.stopPropagation();
-            onPrefetch(department.departmentId, null, true);
-          }}
+          onClick={(event) => handleStatusClick(event, null, true)}
+          onPointerEnter={(event) => handleStatusPrefetch(event, null, true)}
           className={chipClass(isSelected && activeUrgent, "danger")}
         >
           <span aria-hidden="true" className="font-black">!</span>
