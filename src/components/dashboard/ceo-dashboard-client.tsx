@@ -213,29 +213,6 @@ function replaceUrlSilently({
   window.history.replaceState(null, "", nextUrl);
 }
 
-function isDetailPanelOutsideComfortZone(panel: HTMLElement) {
-  const panelTopGap = 20;
-  const panelMinimumVisibleHeight = 180;
-  const rect = panel.getBoundingClientRect();
-
-  return (
-    rect.top < panelTopGap ||
-    rect.bottom < panelMinimumVisibleHeight ||
-    rect.top > window.innerHeight - panelMinimumVisibleHeight
-  );
-}
-
-function scrollDetailPanelIntoView(panel: HTMLElement) {
-  if (window.matchMedia("(max-width: 1023px)").matches) {
-    panel.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
-  if (isDetailPanelOutsideComfortZone(panel)) {
-    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
-}
-
 export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
   const [selectedScope, setSelectedScope] = useState<SelectedScope>("none");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
@@ -315,6 +292,20 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     });
   }, []);
 
+  const closeInspectorPanel = useCallback(() => {
+    setSelectedScope("none");
+    setSelectedDepartmentId(null);
+    setSelectedStatus(null);
+    setUrgentOnly(false);
+    setPage(1);
+    replaceUrlSilently({
+      departmentId: null,
+      scope: "none",
+      status: null,
+      urgent: false,
+    });
+  }, []);
+
   const prefetchDepartment = useCallback(
     (departmentId: string, status?: DirectiveStatusValue | null, urgent = false) => {
       void prefetch({
@@ -385,10 +376,8 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     }
 
     const timer = window.setTimeout(() => {
-      const panel = detailPanelRef.current;
-
-      if (panel) {
-        scrollDetailPanelIntoView(panel);
+      if (window.matchMedia("(max-width: 1023px)").matches) {
+        detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }, 80);
 
@@ -431,7 +420,10 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
         })}
       </section>
 
-      <section aria-label="부서 현황" className="space-y-4">
+      <section
+        aria-label="부서 현황"
+        className={cn("space-y-4", shouldShowPanel && "lg:pr-[590px] 2xl:pr-[640px]")}
+      >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-ink-950">부서 현황</h2>
@@ -448,13 +440,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
             description="지시사항이 등록되면 부서별 실행 현황이 여기에 표시됩니다."
           />
         ) : (
-          <div
-            className={cn(
-              shouldShowPanel
-                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(430px,560px)]"
-                : "grid gap-5",
-            )}
-          >
+          <div className="grid gap-5">
             <div
               className={cn(
                 "grid gap-4",
@@ -476,7 +462,11 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
             </div>
 
             {shouldShowPanel ? (
-              <aside ref={detailPanelRef} className="min-w-0 lg:sticky lg:top-5 lg:self-start">
+              <aside
+                ref={detailPanelRef}
+                aria-label="지시사항 확인창"
+                className="z-40 min-w-0 lg:fixed lg:right-6 lg:top-6 lg:bottom-6 lg:w-[520px] xl:w-[560px] 2xl:w-[600px]"
+              >
                 <DepartmentDirectivePanel
                   data={directivesData}
                   department={selectedDepartment}
@@ -492,6 +482,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
                     }
                   }}
                   onPageChange={(nextPage) => setPage(nextPage)}
+                  onClose={closeInspectorPanel}
                   onRefetch={() => {
                     void refetch();
                   }}

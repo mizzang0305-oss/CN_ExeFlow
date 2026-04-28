@@ -19,6 +19,7 @@ type DepartmentDirectivePanelProps = {
   isLoading: boolean;
   isRefreshing: boolean;
   mode: "global" | "department";
+  onClose: () => void;
   onFilterChange: (status: DirectiveStatusValue | null, urgent: boolean) => void;
   onPageChange: (page: number) => void;
   onRefetch: () => void;
@@ -103,6 +104,7 @@ export function DepartmentDirectivePanel({
   isLoading,
   isRefreshing,
   mode,
+  onClose,
   onFilterChange,
   onPageChange,
   onRefetch,
@@ -120,17 +122,22 @@ export function DepartmentDirectivePanel({
   const totalText = data ? `총 표시 ${itemCount}건` : error ? "총 표시 확인 불가" : "총 표시 확인 중";
 
   return (
-    <section className="detail-panel-enter scroll-mt-4 rounded-[30px] border border-brand-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.94))] p-5 shadow-[0_26px_70px_rgba(6,18,38,0.11)] sm:p-6 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">
-            우측 확인창
-          </span>
-          {isRefreshing ? (
-            <span className="rounded-full border border-success-100 bg-success-50 px-3 py-1 text-sm font-bold text-success-700">
-              최신 확인 중
+    <section className="detail-panel-enter flex h-full scroll-mt-4 flex-col rounded-[30px] border border-brand-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.94))] p-5 shadow-[0_26px_70px_rgba(6,18,38,0.18)] sm:p-6">
+      <div className="flex shrink-0 flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">
+              우측 확인창
             </span>
-          ) : null}
+            {isRefreshing ? (
+              <span className="rounded-full border border-success-100 bg-success-50 px-3 py-1 text-sm font-bold text-success-700">
+                최신 확인 중
+              </span>
+            ) : null}
+          </div>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            닫기
+          </Button>
         </div>
 
         <div>
@@ -161,7 +168,7 @@ export function DepartmentDirectivePanel({
         </div>
       ) : null}
 
-      <div className="mt-6">
+      <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-1">
         {isLoading && !data ? <DirectiveListSkeleton /> : null}
 
         {showBlockingError ? (
