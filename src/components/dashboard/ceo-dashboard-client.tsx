@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { CeoDashboardData, DepartmentAnalysisItem } from "@/features/dashboard";
@@ -134,6 +134,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     normalizeUrgentQueryValue(searchParams.get("urgent")),
   );
   const [page, setPage] = useState(1);
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
 
   const selectedDepartment = useMemo(
     () => data.departments.find((department) => department.departmentId === selectedDepartmentId) ?? null,
@@ -245,6 +246,20 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     return () => window.clearTimeout(timer);
   }, [data.departments, prefetch]);
 
+  useEffect(() => {
+    if (!selectedDepartmentId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (window.matchMedia("(max-width: 1023px)").matches) {
+        detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [selectedDepartmentId, selectedStatus, urgentOnly]);
+
   return (
     <div className="space-y-7">
       <section aria-label="상단 요약 영역" className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -266,9 +281,11 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold text-ink-950">부서 현황</h2>
-            <p className="mt-1 text-base font-semibold text-ink-700">부서를 누르면 같은 화면에서 지시사항이 바로 열립니다.</p>
+            <p className="mt-1 text-base font-semibold text-ink-700">
+              부서를 누르면 오른쪽 확인창에서 지시사항이 바로 열립니다.
+            </p>
           </div>
-          <p className="text-sm font-bold text-ink-600">카드와 상태 칩을 선택할 수 있습니다.</p>
+          <p className="text-sm font-bold text-ink-600">카드와 상태 영역을 선택할 수 있습니다.</p>
         </div>
 
         {data.departments.length === 0 ? (
@@ -277,46 +294,61 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
             description="지시사항이 등록되면 부서별 실행 현황이 여기에 표시됩니다."
           />
         ) : (
-          <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-            {data.departments.map((department) => (
-              <DepartmentProgressCard
-                key={department.departmentId}
-                activeStatus={selectedStatus}
-                activeUrgent={urgentOnly}
-                department={department}
-                isSelected={selectedDepartmentId === department.departmentId}
-                onPrefetch={prefetchDepartment}
-                onSelect={selectDepartment}
-                onStatusSelect={selectStatus}
-              />
-            ))}
+          <div
+            className={cn(
+              selectedDepartmentId
+                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(390px,480px)] 2xl:grid-cols-[minmax(0,1.25fr)_minmax(460px,560px)]"
+                : "grid gap-5",
+            )}
+          >
+            <div
+              className={cn(
+                "grid gap-4",
+                selectedDepartmentId ? "xl:grid-cols-1 2xl:grid-cols-2" : "xl:grid-cols-2 2xl:grid-cols-3",
+              )}
+            >
+              {data.departments.map((department) => (
+                <DepartmentProgressCard
+                  key={department.departmentId}
+                  activeStatus={selectedStatus}
+                  activeUrgent={urgentOnly}
+                  department={department}
+                  isSelected={selectedDepartmentId === department.departmentId}
+                  onPrefetch={prefetchDepartment}
+                  onSelect={selectDepartment}
+                  onStatusSelect={selectStatus}
+                />
+              ))}
+            </div>
+
+            {selectedDepartmentId ? (
+              <div ref={detailPanelRef} className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+                <DepartmentDirectivePanel
+                  data={directivesData}
+                  department={selectedDepartment}
+                  error={directivesError}
+                  isLoading={directivesLoading}
+                  isRefreshing={directivesRefreshing}
+                  onFilterChange={(status, urgent) => {
+                    if (!selectedDepartmentId) {
+                      return;
+                    }
+
+                    selectStatus(selectedDepartmentId, status, urgent);
+                  }}
+                  onPageChange={(nextPage) => setPage(nextPage)}
+                  onRefetch={() => {
+                    void refetch();
+                  }}
+                  page={page}
+                  status={selectedStatus}
+                  urgent={urgentOnly}
+                />
+              </div>
+            ) : null}
           </div>
         )}
       </section>
-
-      {selectedDepartmentId ? (
-        <DepartmentDirectivePanel
-          data={directivesData}
-          department={selectedDepartment}
-          error={directivesError}
-          isLoading={directivesLoading}
-          isRefreshing={directivesRefreshing}
-          onFilterChange={(status, urgent) => {
-            if (!selectedDepartmentId) {
-              return;
-            }
-
-            selectStatus(selectedDepartmentId, status, urgent);
-          }}
-          onPageChange={(nextPage) => setPage(nextPage)}
-          onRefetch={() => {
-            void refetch();
-          }}
-          page={page}
-          status={selectedStatus}
-          urgent={urgentOnly}
-        />
-      ) : null}
     </div>
   );
 }

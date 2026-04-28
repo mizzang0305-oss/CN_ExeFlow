@@ -15,7 +15,7 @@ export type DepartmentDirectiveItem = {
   status: DirectiveStatusValue;
   title: string;
   updated_at: string | null;
-  urgent_level: string | null;
+  urgent_level: string | number | null;
 };
 
 export type DepartmentDirectivesResponse = {
@@ -51,6 +51,7 @@ type HookState = {
 
 const directiveCache = new Map<string, DepartmentDirectivesResponse>();
 const prefetchRequests = new Map<string, Promise<DepartmentDirectivesResponse | null>>();
+const MIN_VISIBLE_LOADING_MS = 420;
 
 function normalizeRequest(request: DepartmentDirectiveRequest) {
   return {
@@ -114,6 +115,7 @@ async function fetchDepartmentDirectives(
   signal?: AbortSignal,
 ) {
   const response = await fetch(buildRequestUrl(request), {
+    cache: "no-store",
     headers: {
       Accept: "application/json",
     },
@@ -121,6 +123,16 @@ async function fetchDepartmentDirectives(
   });
 
   return readDirectiveResponse(response);
+}
+
+function waitForMinimumLoading(startedAt: number) {
+  const remaining = MIN_VISIBLE_LOADING_MS - (Date.now() - startedAt);
+
+  if (remaining <= 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => window.setTimeout(resolve, remaining));
 }
 
 export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
@@ -148,7 +160,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
   }));
 
   const load = useCallback(
-    async (options?: { force?: boolean }) => {
+    async () => {
       if (!cacheKey || !normalizedRequest.departmentId) {
         setState({
           cacheKey: null,
@@ -161,8 +173,9 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
       }
 
       const cachedData = directiveCache.get(cacheKey);
+      const loadingStartedAt = cachedData ? null : Date.now();
 
-      if (cachedData && !options?.force) {
+      if (cachedData) {
         setState({
           cacheKey,
           data: cachedData,
@@ -186,6 +199,15 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
 
       try {
         const data = await fetchDepartmentDirectives(normalizedRequest, controller.signal);
+
+        if (loadingStartedAt !== null) {
+          await waitForMinimumLoading(loadingStartedAt);
+        }
+
+        if (controller.signal.aborted) {
+          return null;
+        }
+
         directiveCache.set(cacheKey, data);
         setState({
           cacheKey,
@@ -255,7 +277,7 @@ export function useDepartmentDirectives(request: DepartmentDirectiveRequest) {
     return promise;
   }, []);
 
-  const refetch = useCallback(() => load({ force: true }), [load]);
+  const refetch = useCallback(() => load(), [load]);
 
   return {
     data: state.cacheKey === cacheKey ? state.data : null,

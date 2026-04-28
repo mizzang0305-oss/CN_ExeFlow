@@ -14,27 +14,27 @@ type DepartmentRow = {
 };
 
 type DirectiveListRow = {
+  assigned_at: string | null;
+  created_at: string;
+  department_status: DirectiveStatusValue;
   directive_id: string;
+  updated_at: string | null;
   directives:
     | {
         created_at: string;
         directive_no: string;
         id: string;
         is_urgent: boolean;
-        status: DirectiveStatusValue;
         title: string;
-        updated_at: string | null;
-        urgent_level: string | null;
+        urgent_level: string | number | null;
       }
     | Array<{
         created_at: string;
         directive_no: string;
         id: string;
         is_urgent: boolean;
-        status: DirectiveStatusValue;
         title: string;
-        updated_at: string | null;
-        urgent_level: string | null;
+        urgent_level: string | number | null;
       }>
     | null;
 };
@@ -77,23 +77,25 @@ export async function GET(request: Request) {
       .select(
         `
           directive_id,
+          department_status,
+          assigned_at,
+          created_at,
+          updated_at,
           directives!inner (
             id,
             directive_no,
             title,
-            status,
             is_urgent,
             urgent_level,
-            created_at,
-            updated_at
+            created_at
           )
         `,
       )
       .eq("department_id", query.departmentId)
-      .eq("directives.is_deleted", false);
+      .eq("directives.is_archived", false);
 
     if (query.status) {
-      directivesQuery = directivesQuery.eq("directives.status", query.status);
+      directivesQuery = directivesQuery.eq("department_status", query.status);
     }
 
     if (query.urgent) {
@@ -107,7 +109,7 @@ export async function GET(request: Request) {
         .eq("id", query.departmentId)
         .maybeSingle<DepartmentRow>(),
       directivesQuery
-        .order("created_at", { ascending: false, referencedTable: "directives" })
+        .order("created_at", { ascending: false })
         .range(from, to)
         .returns<DirectiveListRow[]>(),
     ]);
@@ -160,9 +162,9 @@ export async function GET(request: Request) {
             directive_no: directive.directive_no,
             id: directive.id,
             is_urgent: directive.is_urgent,
-            status: directive.status,
+            status: row.department_status,
             title: directive.title,
-            updated_at: directive.updated_at,
+            updated_at: row.updated_at ?? row.assigned_at,
             urgent_level: directive.urgent_level,
           },
         ];
