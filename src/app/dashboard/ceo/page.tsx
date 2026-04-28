@@ -21,7 +21,7 @@ export default async function CeoDashboardPage() {
       targetType: "dashboard",
     });
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "CEO 대시보드를 불러오지 못했습니다.";
+    errorMessage = error instanceof Error ? error.message : "대표 대시보드를 불러오지 못했습니다.";
   }
 
   return (
@@ -30,11 +30,11 @@ export default async function CeoDashboardPage() {
       description="승인 대기, 지연, 오늘 확인 항목을 먼저 보고, 상세 판단은 우측 패널과 하위 화면으로 이어지는 구조입니다."
       enforceRoleHome
       session={session}
-      title="CEO 대시보드"
+      title="대표 대시보드"
     >
       {errorMessage || !data ? (
         <ErrorState
-          title="CEO 대시보드를 불러오지 못했습니다."
+          title="대표 대시보드를 불러오지 못했습니다."
           description={errorMessage ?? "잠시 후 다시 시도해주세요."}
         />
       ) : (

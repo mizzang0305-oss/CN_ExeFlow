@@ -1,182 +1,321 @@
 "use client";
 
-import Link from "next/link";
-import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import type { CeoDashboardData, DashboardQueueItem } from "@/features/dashboard";
-import { formatDateLabel } from "@/lib";
+import type { CeoDashboardData, DepartmentAnalysisItem } from "@/features/dashboard";
+import type { DirectiveStatusValue } from "@/lib/constants/status-labels";
+import {
+  normalizeDirectiveStatus,
+  normalizeUrgentQueryValue,
+} from "@/lib/constants/status-labels";
+import { useDepartmentDirectives } from "@/lib/hooks/useDepartmentDirectives";
+import { cn } from "@/lib/utils";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { DepartmentDirectivePanel } from "@/components/ceo/DepartmentDirectivePanel";
+import { DepartmentProgressCard } from "@/components/ceo/DepartmentProgressCard";
 import { EmptyState } from "@/components/ui/empty-state";
-
-const CeoDashboardAnalysis = dynamic(
-  () => import("./ceo-dashboard-analysis").then((module) => module.CeoDashboardAnalysis),
-  {
-    loading: () => (
-      <Card className="space-y-3">
-        <div className="h-5 w-32 rounded-full bg-ink-100" />
-        <div className="h-10 rounded-[20px] bg-ink-100" />
-        <div className="h-36 rounded-[24px] bg-ink-100" />
-      </Card>
-    ),
-  },
-);
 
 type CeoDashboardClientProps = {
   data: CeoDashboardData;
 };
 
-function QueueSection({
-  description,
-  emptyDescription,
-  emptyTitle,
-  items,
-  title,
-  onSelect,
-}: {
-  description: string;
-  emptyDescription: string;
-  emptyTitle: string;
-  items: DashboardQueueItem[];
-  title: string;
-  onSelect: (item: DashboardQueueItem) => void;
-}) {
-  return (
-    <Card className="space-y-4">
-      <div>
-        <h2 className="section-title">{title}</h2>
-        <p className="mt-1 text-sm text-ink-700">{description}</p>
-      </div>
+type SummaryCard = {
+  accentClassName: string;
+  label: string;
+  shape: "bar" | "circle" | "diamond" | "ring" | "square" | "warning";
+  value: string;
+};
 
-      {items.length === 0 ? (
-        <EmptyState title={emptyTitle} description={emptyDescription} />
-      ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <button
-              key={`${title}-${item.directiveId}`}
-              type="button"
-              onClick={() => onSelect(item)}
-              className="w-full rounded-[24px] border border-ink-200/90 bg-white px-4 py-4 text-left transition hover:border-brand-300 hover:bg-brand-50/35"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={item.badgeTone}>{item.badgeText}</Badge>
-                <Badge tone="muted">{item.directiveNo}</Badge>
-              </div>
-              <p className="mt-3 text-base font-semibold text-ink-950">{item.title}</p>
-              <p className="mt-2 text-sm text-ink-700">{item.subtitle}</p>
-            </button>
-          ))}
-        </div>
-      )}
-    </Card>
-  );
+function buildSummaryCards(data: CeoDashboardData): SummaryCard[] {
+  const summary = data.executiveSummary;
+
+  return [
+    {
+      accentClassName: "bg-brand-700",
+      label: "전체 지시 건수",
+      shape: "square",
+      value: `${summary.totalCount}`,
+    },
+    {
+      accentClassName: "bg-brand-600",
+      label: "진행중",
+      shape: "bar",
+      value: `${summary.inProgressCount}`,
+    },
+    {
+      accentClassName: "bg-warning-600",
+      label: "승인 대기",
+      shape: "ring",
+      value: `${summary.waitingApprovalCount}`,
+    },
+    {
+      accentClassName: "bg-danger-600",
+      label: "지연",
+      shape: "diamond",
+      value: `${summary.delayedCount}`,
+    },
+    {
+      accentClassName: "bg-danger-700",
+      label: "긴급",
+      shape: "warning",
+      value: `${summary.urgentCount}`,
+    },
+    {
+      accentClassName: "bg-success-600",
+      label: "완료율",
+      shape: "circle",
+      value: `${summary.completionRate}%`,
+    },
+  ];
+}
+
+function SummaryShape({
+  className,
+  shape,
+}: {
+  className: string;
+  shape: SummaryCard["shape"];
+}) {
+  if (shape === "diamond") {
+    return <span aria-hidden="true" className={cn("h-4 w-4 rotate-45 rounded-[3px]", className)} />;
+  }
+
+  if (shape === "ring") {
+    return <span aria-hidden="true" className="h-4 w-4 rounded-full border-[5px] border-warning-600 bg-white" />;
+  }
+
+  if (shape === "bar") {
+    return <span aria-hidden="true" className={cn("h-4 w-7 rounded-full", className)} />;
+  }
+
+  if (shape === "warning") {
+    return <span aria-hidden="true" className={cn("flex h-6 w-6 items-center justify-center rounded-full text-sm font-black text-white", className)}>!</span>;
+  }
+
+  return <span aria-hidden="true" className={cn("h-4 w-4 rounded-full", shape === "square" && "rounded-[4px]", className)} />;
+}
+
+function compareRisk(left: DepartmentAnalysisItem, right: DepartmentAnalysisItem) {
+  const leftRisk = [
+    left.delayedCount > 0 ? 0 : 1,
+    left.urgentCount > 0 ? 0 : 1,
+    left.waitingApprovalCount > 0 ? 0 : 1,
+    left.completionRate,
+  ];
+  const rightRisk = [
+    right.delayedCount > 0 ? 0 : 1,
+    right.urgentCount > 0 ? 0 : 1,
+    right.waitingApprovalCount > 0 ? 0 : 1,
+    right.completionRate,
+  ];
+
+  for (let index = 0; index < leftRisk.length; index += 1) {
+    if (leftRisk[index] !== rightRisk[index]) {
+      return leftRisk[index] - rightRisk[index];
+    }
+  }
+
+  return right.totalCount - left.totalCount;
 }
 
 export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
-  const [selectedItem, setSelectedItem] = useState<DashboardQueueItem | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(() =>
+    searchParams.get("departmentId"),
+  );
+  const [selectedStatus, setSelectedStatus] = useState<DirectiveStatusValue | null>(() =>
+    normalizeDirectiveStatus(searchParams.get("status")),
+  );
+  const [urgentOnly, setUrgentOnly] = useState(() =>
+    normalizeUrgentQueryValue(searchParams.get("urgent")),
+  );
+  const [page, setPage] = useState(1);
+
+  const selectedDepartment = useMemo(
+    () => data.departments.find((department) => department.departmentId === selectedDepartmentId) ?? null,
+    [data.departments, selectedDepartmentId],
+  );
+  const summaryCards = useMemo(() => buildSummaryCards(data), [data]);
+
+  const {
+    data: directivesData,
+    error: directivesError,
+    isLoading: directivesLoading,
+    isRefreshing: directivesRefreshing,
+    prefetch,
+    refetch,
+  } = useDepartmentDirectives({
+    departmentId: selectedDepartmentId,
+    limit: 50,
+    page,
+    status: selectedStatus,
+    urgent: urgentOnly,
+  });
+
+  const updateUrl = useCallback(
+    (departmentId: string | null, status: DirectiveStatusValue | null, urgent: boolean) => {
+      const nextParams = new URLSearchParams();
+
+      if (departmentId) {
+        nextParams.set("departmentId", departmentId);
+      }
+
+      if (status) {
+        nextParams.set("status", status);
+      }
+
+      if (urgent) {
+        nextParams.set("urgent", "true");
+      }
+
+      const query = nextParams.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router],
+  );
+
+  const selectDepartment = useCallback(
+    (departmentId: string) => {
+      setSelectedDepartmentId(departmentId);
+      setSelectedStatus(null);
+      setUrgentOnly(false);
+      setPage(1);
+      updateUrl(departmentId, null, false);
+    },
+    [updateUrl],
+  );
+
+  const selectStatus = useCallback(
+    (departmentId: string, status: DirectiveStatusValue | null, urgent = false) => {
+      setSelectedDepartmentId(departmentId);
+      setSelectedStatus(urgent ? null : status);
+      setUrgentOnly(urgent);
+      setPage(1);
+      updateUrl(departmentId, urgent ? null : status, urgent);
+    },
+    [updateUrl],
+  );
+
+  const prefetchDepartment = useCallback(
+    (departmentId: string, status?: DirectiveStatusValue | null, urgent = false) => {
+      void prefetch({
+        departmentId,
+        limit: 50,
+        page: 1,
+        status: urgent ? null : status ?? null,
+        urgent,
+      });
+    },
+    [prefetch],
+  );
+
+  useEffect(() => {
+    const departmentId = searchParams.get("departmentId");
+    const status = normalizeDirectiveStatus(searchParams.get("status"));
+    const urgent = normalizeUrgentQueryValue(searchParams.get("urgent"));
+    const timer = window.setTimeout(() => {
+      setSelectedDepartmentId(departmentId);
+      setSelectedStatus(urgent ? null : status);
+      setUrgentOnly(urgent);
+      setPage(1);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const targets = [...data.departments].sort(compareRisk).slice(0, 3);
+
+    const timer = window.setTimeout(() => {
+      for (const department of targets) {
+        void prefetch({
+          departmentId: department.departmentId,
+          limit: 50,
+          page: 1,
+          status: null,
+          urgent: false,
+        });
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [data.departments, prefetch]);
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {data.actionCards.map((card) => (
-          <Link key={card.id} href={card.href} className="block">
-            <Card className="h-full space-y-3 transition hover:border-brand-300 hover:bg-brand-50/35">
-              <Badge tone={card.tone}>{card.label}</Badge>
-              <p className="text-4xl font-semibold tracking-tight text-ink-950">{card.value}</p>
-              <p className="text-sm leading-6 text-ink-700">{card.description}</p>
-            </Card>
-          </Link>
+    <div className="space-y-7">
+      <section aria-label="상단 요약 영역" className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        {summaryCards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-[24px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-base font-bold text-ink-700">{card.label}</p>
+              <SummaryShape className={card.accentClassName} shape={card.shape} />
+            </div>
+            <p className="mt-4 text-5xl font-bold text-ink-950">{card.value}</p>
+          </div>
         ))}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_1fr_1fr]">
-        <QueueSection
-          title="지금 승인"
-          description="대표 결정을 기다리는 완료 요청입니다."
-          emptyTitle="승인 대기 항목이 없습니다."
-          emptyDescription="지금 바로 승인할 항목이 없으면 가장 먼저 이 영역이 비어 있어야 합니다."
-          items={data.approveNowQueue}
-          onSelect={setSelectedItem}
-        />
-        <QueueSection
-          title="지금 리스크"
-          description="지연, 반려, 증빙 부족 항목을 묶어서 보여줍니다."
-          emptyTitle="즉시 개입할 리스크가 없습니다."
-          emptyDescription="지연과 증빙 부족 항목이 없으면 운영 상태가 안정적입니다."
-          items={data.riskNowQueue}
-          onSelect={setSelectedItem}
-        />
-        <QueueSection
-          title="오늘 확인"
-          description="오늘 또는 임박한 마감 항목을 빠르게 점검합니다."
-          emptyTitle="오늘 확인할 마감 항목이 없습니다."
-          emptyDescription="오늘 안에 확인이 필요한 지시는 현재 없습니다."
-          items={data.checkTodayQueue}
-          onSelect={setSelectedItem}
-        />
+      <section aria-label="부서 현황" className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-ink-950">부서 현황</h2>
+            <p className="mt-1 text-base font-semibold text-ink-700">부서를 누르면 같은 화면에서 지시사항이 바로 열립니다.</p>
+          </div>
+          <p className="text-sm font-bold text-ink-600">카드와 상태 칩을 선택할 수 있습니다.</p>
+        </div>
+
+        {data.departments.length === 0 ? (
+          <EmptyState
+            title="부서 현황이 없습니다."
+            description="지시사항이 등록되면 부서별 실행 현황이 여기에 표시됩니다."
+          />
+        ) : (
+          <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+            {data.departments.map((department) => (
+              <DepartmentProgressCard
+                key={department.departmentId}
+                activeStatus={selectedStatus}
+                activeUrgent={urgentOnly}
+                department={department}
+                isSelected={selectedDepartmentId === department.departmentId}
+                onPrefetch={prefetchDepartment}
+                onSelect={selectDepartment}
+                onStatusSelect={selectStatus}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
-      <CeoDashboardAnalysis
-        departments={data.departments}
-        latestReport={data.latestReport}
-        recentActivity={data.recentActivity}
-        reportSummaryCards={data.reportSummaryCards}
-        weeklyTrend={data.weeklyTrend}
-      />
+      {selectedDepartmentId ? (
+        <DepartmentDirectivePanel
+          data={directivesData}
+          department={selectedDepartment}
+          error={directivesError}
+          isLoading={directivesLoading}
+          isRefreshing={directivesRefreshing}
+          onFilterChange={(status, urgent) => {
+            if (!selectedDepartmentId) {
+              return;
+            }
 
-      {selectedItem ? (
-        <div className="fixed inset-0 z-40 flex justify-end bg-[rgba(3,19,38,0.34)] backdrop-blur-[2px]">
-          <button
-            type="button"
-            className="absolute inset-0"
-            aria-label="패널 닫기"
-            onClick={() => setSelectedItem(null)}
-          />
-          <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-white/60 bg-white px-6 py-6 shadow-[0_32px_80px_rgba(3,19,38,0.22)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={selectedItem.badgeTone}>{selectedItem.badgeText}</Badge>
-                  <Badge tone="muted">{selectedItem.directiveNo}</Badge>
-                </div>
-                <h2 className="mt-4 text-2xl font-semibold tracking-tight text-ink-950">{selectedItem.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-ink-700">{selectedItem.subtitle}</p>
-              </div>
-
-              <button
-                type="button"
-                className="rounded-full bg-ink-100 px-3 py-2 text-sm font-semibold text-ink-700"
-                onClick={() => setSelectedItem(null)}
-              >
-                닫기
-              </button>
-            </div>
-
-            <div className="mt-6 rounded-[24px] border border-ink-200/90 bg-ink-50/80 px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-500">즉시 확인 포인트</p>
-              <p className="mt-3 text-sm leading-6 text-ink-700">
-                {selectedItem.dueDate
-                  ? `마감일은 ${formatDateLabel(selectedItem.dueDate)}입니다. 현황을 열어 로그와 증빙을 먼저 확인한 뒤 승인 또는 보완 지시를 진행하세요.`
-                  : "상세 화면에서 완료 요청 사유, 최근 로그, 증빙 자료를 확인한 뒤 승인 또는 보완 지시를 진행하세요."}
-              </p>
-            </div>
-
-            <div className="mt-auto flex flex-wrap gap-3 pt-6">
-              <Link href={selectedItem.href}>
-                <Button size="lg">상세 화면 열기</Button>
-              </Link>
-              <Link href="/directives/approval-queue">
-                <Button size="lg" variant="secondary">
-                  승인 큐 열기
-                </Button>
-              </Link>
-            </div>
-          </aside>
-        </div>
+            selectStatus(selectedDepartmentId, status, urgent);
+          }}
+          onPageChange={(nextPage) => setPage(nextPage)}
+          onRefetch={() => {
+            void refetch();
+          }}
+          page={page}
+          status={selectedStatus}
+          urgent={urgentOnly}
+        />
       ) : null}
     </div>
   );

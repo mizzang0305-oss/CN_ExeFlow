@@ -824,9 +824,32 @@ function mapDirectiveSummary(options: {
   const targetDepartmentCount = directiveAssignments.length || (options.directive.owner_department_id ? 1 : 0);
   const targetScope =
     creationMetadata?.targetScope ?? resolveTargetScope(directiveAssignments, options.activeDepartmentIds);
+  const assignedDepartments =
+    directiveAssignments.length > 0
+      ? directiveAssignments.map((assignment) => {
+          const department = options.departmentMap.get(assignment.department_id);
+
+          return {
+            departmentCode: department?.code ?? null,
+            departmentId: assignment.department_id,
+            departmentName: department?.name ?? null,
+            departmentStatus: assignment.department_status,
+          };
+        })
+      : options.directive.owner_department_id
+        ? [
+            {
+              departmentCode: ownerDepartment?.code ?? null,
+              departmentId: options.directive.owner_department_id,
+              departmentName: ownerDepartment?.name ?? null,
+              departmentStatus: options.directive.status,
+            },
+          ]
+        : [];
 
   return {
     ...activitySummary,
+    assignedDepartments,
     departmentProgress,
     directiveNo: options.directive.directive_no,
     dueDate: options.directive.due_date,
@@ -837,6 +860,7 @@ function mapDirectiveSummary(options: {
     isUrgent: options.directive.is_urgent,
     currentDepartmentId: currentDepartmentAssignment?.department_id ?? null,
     currentDepartmentStatus: currentDepartmentAssignment?.department_status ?? null,
+    ownerDepartmentId: options.directive.owner_department_id,
     ownerDepartmentCode: ownerDepartment?.code ?? null,
     ownerDepartmentName: ownerDepartment?.name ?? null,
     ownerUserId: options.directive.owner_user_id,
@@ -2710,7 +2734,7 @@ export async function getDashboardData(session: AppSession): Promise<DashboardDa
     kpis: [
       { label: "전체 건수", tone: "default", value: items.length, description: "현재 집행 범위 전체" },
       {
-        label: "진행 중",
+        label: "진행중",
         tone: "muted",
         value: items.filter((item) => item.status === "IN_PROGRESS").length,
         description: "현재 실행이 이어지는 지시",

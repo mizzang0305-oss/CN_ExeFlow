@@ -15,7 +15,7 @@ export function Card({
 }
 
 export function CardTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-xl font-semibold tracking-tight text-ink-950">{children}</h2>;
+  return <h2 className="text-xl font-semibold text-ink-950">{children}</h2>;
 }
 
 export function CardDescription({ children }: { children: ReactNode }) {

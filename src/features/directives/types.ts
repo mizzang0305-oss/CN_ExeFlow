@@ -152,7 +152,15 @@ export interface DirectiveActivitySummary {
   logCount: number;
 }
 
+export interface DirectiveListDepartmentAssignment {
+  departmentCode: string | null;
+  departmentId: string;
+  departmentName: string | null;
+  departmentStatus: DirectiveStatus;
+}
+
 export interface DirectiveListItem extends DirectiveActivitySummary {
+  assignedDepartments: DirectiveListDepartmentAssignment[];
   currentDepartmentId: string | null;
   currentDepartmentStatus: DirectiveStatus | null;
   departmentProgress: Record<DirectiveStatus, number>;
@@ -161,6 +169,7 @@ export interface DirectiveListItem extends DirectiveActivitySummary {
   id: string;
   isDelayed: boolean;
   isUrgent: boolean;
+  ownerDepartmentId: string | null;
   ownerDepartmentCode: string | null;
   ownerDepartmentName: string | null;
   ownerUserId: string | null;

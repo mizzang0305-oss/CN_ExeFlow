@@ -18,6 +18,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 import type {
   CeoDashboardData,
   DashboardQueueItem,
+  CeoExecutiveSummary,
   DepartmentAnalysisItem,
   QuickLogDirectiveOption,
   StaffRecentLogItem,
@@ -126,23 +127,44 @@ function summarizeDepartments(items: DirectiveListItem[]): DepartmentAnalysisIte
   const summaryMap = new Map<string, DepartmentAnalysisItem>();
 
   for (const item of items) {
-    const key = item.ownerDepartmentName ?? "미지정 부서";
-    const current = summaryMap.get(key) ?? {
-      completedCount: 0,
-      completionRate: 0,
-      delayedCount: 0,
-      departmentName: key,
-      totalCount: 0,
-      urgentCount: 0,
-      waitingApprovalCount: 0,
-    };
+    const assignments =
+      item.assignedDepartments.length > 0
+        ? item.assignedDepartments
+        : item.ownerDepartmentId
+          ? [
+              {
+                departmentCode: item.ownerDepartmentCode,
+                departmentId: item.ownerDepartmentId,
+                departmentName: item.ownerDepartmentName,
+                departmentStatus: item.status,
+              },
+            ]
+          : [];
 
-    current.totalCount += 1;
-    current.completedCount += item.status === "COMPLETED" ? 1 : 0;
-    current.delayedCount += item.isDelayed ? 1 : 0;
-    current.urgentCount += item.isUrgent ? 1 : 0;
-    current.waitingApprovalCount += item.status === "COMPLETION_REQUESTED" ? 1 : 0;
-    summaryMap.set(key, current);
+    for (const assignment of assignments) {
+      const key = assignment.departmentId;
+      const current = summaryMap.get(key) ?? {
+        completedCount: 0,
+        completionRate: 0,
+        delayedCount: 0,
+        departmentId: assignment.departmentId,
+        departmentName: assignment.departmentName ?? "미지정 부서",
+        inProgressCount: 0,
+        rejectedCount: 0,
+        totalCount: 0,
+        urgentCount: 0,
+        waitingApprovalCount: 0,
+      };
+
+      current.totalCount += 1;
+      current.completedCount += assignment.departmentStatus === "COMPLETED" ? 1 : 0;
+      current.delayedCount += item.isDelayed || assignment.departmentStatus === "DELAYED" ? 1 : 0;
+      current.inProgressCount += ["NEW", "IN_PROGRESS"].includes(assignment.departmentStatus) ? 1 : 0;
+      current.rejectedCount += assignment.departmentStatus === "REJECTED" ? 1 : 0;
+      current.urgentCount += item.isUrgent ? 1 : 0;
+      current.waitingApprovalCount += assignment.departmentStatus === "COMPLETION_REQUESTED" ? 1 : 0;
+      summaryMap.set(key, current);
+    }
   }
 
   return Array.from(summaryMap.values())
@@ -158,7 +180,22 @@ function summarizeDepartments(items: DirectiveListItem[]): DepartmentAnalysisIte
       }
       return right.totalCount - left.totalCount;
     })
-    .slice(0, 8);
+    .slice(0, 12);
+}
+
+function buildExecutiveSummary(items: DirectiveListItem[]): CeoExecutiveSummary {
+  const totalCount = items.length;
+  const completedCount = items.filter((item) => item.status === "COMPLETED").length;
+
+  return {
+    completedCount,
+    completionRate: totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100),
+    delayedCount: items.filter((item) => item.isDelayed).length,
+    inProgressCount: items.filter((item) => item.status === "IN_PROGRESS" || item.status === "NEW").length,
+    totalCount,
+    urgentCount: items.filter((item) => item.isUrgent && item.status !== "COMPLETED").length,
+    waitingApprovalCount: items.filter((item) => item.status === "COMPLETION_REQUESTED").length,
+  };
 }
 
 function buildWeeklyTrend(recentReports: Awaited<ReturnType<typeof getReportsOverview>>["recentReports"]) {
@@ -185,7 +222,7 @@ const loadCachedReportsOverview = unstable_cache(
 
 export async function getCeoDashboardData(session: AppSession): Promise<CeoDashboardData> {
   if (!isAdminRole(session.role)) {
-    throw new ApiError(403, "CEO 대시보드는 대표와 슈퍼 관리자만 조회할 수 있습니다.", null, "CEO_DASHBOARD_DENIED");
+    throw new ApiError(403, "대표 대시보드는 대표와 슈퍼 관리자만 조회할 수 있습니다.", null, "CEO_DASHBOARD_DENIED");
   }
 
   const [dashboard, approvalQueue, reportsOverview] = await Promise.all([
@@ -257,6 +294,7 @@ export async function getCeoDashboardData(session: AppSession): Promise<CeoDashb
       }),
     ),
     departments: summarizeDepartments(dashboard.items),
+    executiveSummary: buildExecutiveSummary(dashboard.items),
     latestReport: reportsOverview.latestReport,
     recentActivity: dashboard.recentUpdates.slice(0, 8),
     reportSummaryCards: reportsOverview.summaryCards,

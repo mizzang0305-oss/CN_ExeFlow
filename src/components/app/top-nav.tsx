@@ -37,7 +37,7 @@ export function TopNav({ currentPath, items }: TopNavProps) {
             key={item.href}
             href={item.href}
             className={cn(
-              "inline-flex min-h-11 min-w-[9.75rem] flex-1 items-center justify-center rounded-[20px] px-4 py-2.5 text-sm font-semibold tracking-[-0.01em] whitespace-nowrap transition duration-200 sm:flex-none",
+              "inline-flex min-h-11 min-w-[9.75rem] flex-1 items-center justify-center rounded-[20px] px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition duration-200 sm:flex-none",
               isActive
                 ? "bg-[linear-gradient(135deg,var(--color-brand-900),var(--color-brand-700))] text-white shadow-[0_18px_36px_rgba(3,19,38,0.34)] ring-1 ring-white/14"
                 : "border border-brand-100/90 bg-white text-brand-900 shadow-[0_12px_24px_rgba(3,19,38,0.08)] hover:-translate-y-0.5 hover:bg-brand-50",

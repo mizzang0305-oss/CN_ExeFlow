@@ -1,10 +1,7 @@
+import { DIRECTIVE_STATUS_LABELS, DIRECTIVE_STATUS_VALUES } from "@/lib/constants/status-labels";
+
 export const directiveStatuses = [
-  "NEW",
-  "IN_PROGRESS",
-  "COMPLETION_REQUESTED",
-  "DELAYED",
-  "COMPLETED",
-  "REJECTED",
+  ...DIRECTIVE_STATUS_VALUES,
 ] as const;
 
 export const directiveLogTypes = [
@@ -21,12 +18,7 @@ export const directiveLogTypes = [
 export const directiveUrgentLevels = ["LOW", "HIGH", "CRITICAL"] as const;
 
 export const directiveStatusLabels = {
-  NEW: "신규",
-  IN_PROGRESS: "진행 중",
-  COMPLETION_REQUESTED: "승인 대기",
-  DELAYED: "지연",
-  COMPLETED: "완료",
-  REJECTED: "반려",
+  ...DIRECTIVE_STATUS_LABELS,
 } as const;
 
 export const directiveUrgentLevelLabels = {
