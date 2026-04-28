@@ -213,6 +213,29 @@ function replaceUrlSilently({
   window.history.replaceState(null, "", nextUrl);
 }
 
+function isDetailPanelOutsideComfortZone(panel: HTMLElement) {
+  const panelTopGap = 20;
+  const panelMinimumVisibleHeight = 180;
+  const rect = panel.getBoundingClientRect();
+
+  return (
+    rect.top < panelTopGap ||
+    rect.bottom < panelMinimumVisibleHeight ||
+    rect.top > window.innerHeight - panelMinimumVisibleHeight
+  );
+}
+
+function scrollDetailPanelIntoView(panel: HTMLElement) {
+  if (window.matchMedia("(max-width: 1023px)").matches) {
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (isDetailPanelOutsideComfortZone(panel)) {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
 export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
   const [selectedScope, setSelectedScope] = useState<SelectedScope>("none");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
@@ -362,8 +385,10 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     }
 
     const timer = window.setTimeout(() => {
-      if (window.matchMedia("(max-width: 1023px)").matches) {
-        detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const panel = detailPanelRef.current;
+
+      if (panel) {
+        scrollDetailPanelIntoView(panel);
       }
     }, 80);
 
