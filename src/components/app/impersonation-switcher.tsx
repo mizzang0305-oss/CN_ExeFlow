@@ -31,6 +31,7 @@ type ImpersonationAuditAction = "IMPERSONATION_STARTED" | "IMPERSONATION_ENDED";
 
 const IMPERSONATION_STORAGE_KEY = "cn.impersonation";
 const IMPERSONATION_CHANGED_EVENT = "cn.impersonation.changed";
+export const ENABLE_IMPERSONATION_SWITCHER = process.env.NEXT_PUBLIC_ENABLE_IMPERSONATION === "true";
 const EMPTY_IMPERSONATION: ImpersonationState = {
   active: false,
   userId: null,
@@ -131,7 +132,7 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [isPending, setIsPending] = useState(false);
   const impersonation = useStoredImpersonationState();
-  const canSwitchUser = Boolean(session?.userId) && isAdminRole(session.role);
+  const canSwitchUser = ENABLE_IMPERSONATION_SWITCHER && Boolean(session?.userId) && isAdminRole(session.role);
   const selectedUser = useMemo(
     () => users.find((user) => user.id === selectedUserId) ?? null,
     [selectedUserId, users],
@@ -204,6 +205,10 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
       clearImpersonationState();
       window.location.reload();
     }
+  }
+
+  if (!ENABLE_IMPERSONATION_SWITCHER) {
+    return null;
   }
 
   if (!canSwitchUser) {

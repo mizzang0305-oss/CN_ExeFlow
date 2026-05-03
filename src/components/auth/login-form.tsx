@@ -114,7 +114,7 @@ export function LoginForm({ bootstrapData }: LoginFormProps) {
   const [mode, setMode] = useState<LoginMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
@@ -481,7 +481,7 @@ export function LoginForm({ bootstrapData }: LoginFormProps) {
             />
             <StepPill
               title="자동 로그인"
-              description="로그인 상태 유지를 선택하면 다음 접속부터 바로 진입합니다."
+              description="자동 로그인을 선택하면 다음 접속부터 바로 진입합니다."
               isActive={false}
               isComplete={rememberMe}
             />
@@ -533,15 +533,18 @@ export function LoginForm({ bootstrapData }: LoginFormProps) {
               />
             </FieldGroup>
 
-            <label className="inline-flex items-center gap-2 text-sm text-ink-700">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(event) => setRememberMe(event.target.checked)}
-                className="h-4 w-4 rounded border border-ink-300 text-brand-700"
-              />
-              로그인 상태 유지
-            </label>
+            <div className="rounded-[22px] border border-brand-100 bg-brand-50/70 px-4 py-3">
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-ink-900">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  className="h-4 w-4 rounded border border-ink-300 text-brand-700"
+                />
+                자동 로그인
+              </label>
+              <p className="mt-2 text-xs font-semibold text-ink-600">개인 휴대폰에서만 사용해주세요.</p>
+            </div>
 
             <Button type="submit" block size="lg" isLoading={isPending} loadingLabel="로그인 중">
               로그인

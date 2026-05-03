@@ -13,7 +13,7 @@ export default async function MeetingManagementPage() {
     <AppFrame
       currentPath="/meetings"
       session={session}
-      title="회의록 관리"
+      title="회의실 입장"
       description="회의 내용을 저장하고 지시 후보를 분석한 뒤 부서별 지시사항으로 등록합니다."
     >
       <MeetingManagementClient initialData={data} />

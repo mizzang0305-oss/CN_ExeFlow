@@ -1,0 +1,23 @@
+{
+  "name": "CN EXEFLOW",
+  "short_name": "CN EXEFLOW",
+  "description": "조직 실행 통제 시스템",
+  "start_url": "/dashboard/ceo",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f7fc",
+  "theme_color": "#07203f",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
