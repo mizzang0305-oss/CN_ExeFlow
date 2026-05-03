@@ -27,6 +27,8 @@ type ImpersonationUsersResponse = {
   users: ImpersonationUser[];
 };
 
+type ImpersonationAuditAction = "IMPERSONATION_STARTED" | "IMPERSONATION_ENDED";
+
 const IMPERSONATION_STORAGE_KEY = "cn.impersonation";
 const IMPERSONATION_CHANGED_EVENT = "cn.impersonation.changed";
 const EMPTY_IMPERSONATION: ImpersonationState = {
@@ -83,6 +85,24 @@ function clearImpersonationState() {
 
   window.localStorage.removeItem(IMPERSONATION_STORAGE_KEY);
   notifyImpersonationChanged();
+}
+
+async function recordImpersonationAudit(action: ImpersonationAuditAction, state: ImpersonationState) {
+  if (!state.userId) {
+    return;
+  }
+
+  const response = await fetch("/api/admin/impersonation/audit", {
+    body: JSON.stringify({
+      action,
+      impersonatedUserId: state.userId,
+      impersonatedUserName: state.userName,
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+
+  await readApiResponse<{ recorded: boolean }>(response);
 }
 
 export function useStoredImpersonationState() {
@@ -154,21 +174,36 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
     };
   }, [canSwitchUser, session.userId]);
 
-  function startSwitch() {
+  async function startSwitch() {
     if (!selectedUser) {
       return;
     }
 
-    storeImpersonationState({
+    const nextState = {
       active: true,
       userId: selectedUser.id,
       userName: selectedUser.displayName,
-    });
+    } satisfies ImpersonationState;
+
+    setIsPending(true);
+
+    try {
+      await recordImpersonationAudit("IMPERSONATION_STARTED", nextState);
+      storeImpersonationState(nextState);
+    } finally {
+      setIsPending(false);
+    }
   }
 
-  function stopSwitch() {
-    clearImpersonationState();
-    window.location.reload();
+  async function stopSwitch() {
+    setIsPending(true);
+
+    try {
+      await recordImpersonationAudit("IMPERSONATION_ENDED", impersonation);
+    } finally {
+      clearImpersonationState();
+      window.location.reload();
+    }
   }
 
   if (!canSwitchUser) {
@@ -185,7 +220,9 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
           variant="secondary"
           size="sm"
           className="mt-3"
-          onClick={stopSwitch}
+          isLoading={isPending}
+          loadingLabel="확인 중"
+          onClick={() => void stopSwitch()}
         >
           슈퍼관리자로 돌아가기
         </Button>
@@ -220,7 +257,7 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
           disabled={!selectedUserId || isPending}
           isLoading={isPending}
           loadingLabel="확인 중"
-          onClick={startSwitch}
+          onClick={() => void startSwitch()}
         >
           전환
         </Button>
