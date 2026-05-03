@@ -34,6 +34,9 @@ test("초기 사용자 시드는 중복 실행 안전성과 비밀번호 변경 
   assert.match(seed, /existing\.find\(\(item\) => item\.code === department\.code\)\s*\?\?/);
   assert.match(seed, /isPasswordPolicyError/);
   assert.match(seed, /passwordFallbackPayload/);
+  assert.match(seed, /canSignInWithInitialPassword/);
+  assert.match(seed, /recreateAuthUserWithInitialPassword/);
+  assert.match(seed, /deleteUser\(existing\.id\)/);
   assert.match(migration, /must_change_password/i);
 
   for (const email of [
