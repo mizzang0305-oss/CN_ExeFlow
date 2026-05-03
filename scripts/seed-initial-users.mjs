@@ -47,6 +47,7 @@ loadEnvFile(".env");
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const INITIAL_USER_PASSWORD = "8639";
 
@@ -274,7 +275,38 @@ async function findAuthUserByEmail(client, email) {
   return null;
 }
 
-async function upsertAuthUser(client, user) {
+async function canSignInWithInitialPassword(signInClient, email) {
+  if (!signInClient) {
+    return false;
+  }
+
+  const { error } = await signInClient.auth.signInWithPassword({
+    email,
+    password: INITIAL_USER_PASSWORD,
+  });
+  await signInClient.auth.signOut();
+
+  return !error;
+}
+
+async function recreateAuthUserWithInitialPassword(client, existing, authPayload, email) {
+  const { error: deleteError } = await client.auth.admin.deleteUser(existing.id);
+
+  if (deleteError) {
+    throw new Error(`${email} 기존 인증 계정을 재생성하기 위해 삭제하지 못했습니다: ${deleteError.message}`);
+  }
+
+  const { data, error } = await client.auth.admin.createUser(authPayload);
+
+  if (error || !data.user) {
+    throw new Error(`${email} 인증 계정을 재생성하지 못했습니다: ${error?.message ?? "응답 없음"}`);
+  }
+
+  console.warn(`${email} 기존 인증 계정을 초기 비밀번호로 재생성했습니다.`);
+  return data.user;
+}
+
+async function upsertAuthUser(client, signInClient, user) {
   const email = normalizeEmail(user.email);
   const existing = await findAuthUserByEmail(client, email);
   const authPayload = {
@@ -292,6 +324,10 @@ async function upsertAuthUser(client, user) {
     const { data, error } = await client.auth.admin.updateUserById(existing.id, authPayload);
 
     if (error && isPasswordPolicyError(error)) {
+      if (!(await canSignInWithInitialPassword(signInClient, email))) {
+        return recreateAuthUserWithInitialPassword(client, existing, authPayload, email);
+      }
+
       const passwordFallbackPayload = {
         email,
         email_confirm: true,
@@ -386,13 +422,21 @@ async function main() {
       },
     },
   );
+  const signInClient = ANON_KEY
+    ? createClient(SUPABASE_URL, ANON_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+    : null;
 
   const departmentByName = await ensureDepartments(client);
   const results = [];
 
   for (const user of INITIAL_USERS) {
     try {
-      const authUser = await upsertAuthUser(client, user);
+      const authUser = await upsertAuthUser(client, signInClient, user);
       await upsertPublicUser(client, user, authUser, departmentByName);
       results.push({ email: user.email, name: user.name, status: "성공" });
       console.log(`[성공] ${user.name} ${user.email}`);
