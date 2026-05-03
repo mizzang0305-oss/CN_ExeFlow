@@ -458,7 +458,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
 
       <section
         aria-label="부서 현황"
-        className={cn("space-y-4", shouldShowPanel && "lg:pr-[620px] xl:pr-[700px] 2xl:pr-[780px]")}
+        className={cn("space-y-4", shouldShowPanel && "lg:pr-[700px] xl:pr-[800px] 2xl:pr-[900px]")}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -501,7 +501,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
               <aside
                 ref={detailPanelRef}
                 aria-label="지시사항 확인창"
-                className="z-40 min-w-0 lg:fixed lg:right-6 lg:top-6 lg:bottom-6 lg:w-[560px] xl:w-[640px] 2xl:w-[720px]"
+                className="z-40 min-w-0 lg:fixed lg:right-6 lg:top-6 lg:bottom-6 lg:w-[660px] xl:w-[760px] 2xl:w-[860px]"
               >
                 <DepartmentDirectivePanel
                   data={directivesData}

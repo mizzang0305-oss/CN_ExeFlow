@@ -179,6 +179,17 @@ function recommendDepartmentIds(line: string, departments: MeetingDepartmentOpti
   };
 }
 
+function includeAllDepartment(departments: MeetingDepartmentOption[], departmentIds: string[]) {
+  const selected = new Set(departmentIds);
+  const allDepartment = departments.find((department) => department.name === "전체");
+
+  if (allDepartment) {
+    selected.add(allDepartment.id);
+  }
+
+  return Array.from(selected);
+}
+
 async function loadActiveDepartments(): Promise<MeetingDepartmentOption[]> {
   const client = createSupabaseServerClient();
   const { data, error } = await client
@@ -448,6 +459,7 @@ export async function registerSelectedMeetingDraftsAsSession(
     .select("id, title, content, recommended_departments, selected_department_ids, status, is_selected, is_urgent")
     .eq("meeting_id", input.meetingId)
     .eq("is_selected", true)
+    .eq("status", "DRAFT")
     .returns<MeetingDraftRow[]>();
 
   if (error) {
@@ -460,9 +472,10 @@ export async function registerSelectedMeetingDraftsAsSession(
     const selectedDepartmentIds = (draft.selected_department_ids ?? []).filter((departmentId) =>
       activeDepartmentIds.has(departmentId),
     );
-    const targetDepartmentIds = selectedDepartmentIds.length > 0
+    const baseTargetDepartmentIds = selectedDepartmentIds.length > 0
       ? selectedDepartmentIds
       : departments.map((department) => department.id);
+    const targetDepartmentIds = includeAllDepartment(departments, baseTargetDepartmentIds);
 
     const directive = await createDirectiveAsSession(session, {
       content: `${draft.content}\n\n회의록 출처: ${input.meetingId}`,

@@ -36,49 +36,57 @@ function statusClassName(status: string, isUrgent: boolean) {
 
 export function DirectiveList({ items }: DirectiveListProps) {
   return (
-    <div className="overflow-hidden rounded-[22px] border border-ink-200 bg-white shadow-[0_14px_34px_rgba(6,18,38,0.06)]">
-      <div className="hidden grid-cols-[7rem_4rem_minmax(18rem,1fr)_4.25rem] gap-2 border-b border-ink-100 bg-ink-50 px-3 py-2 text-[11px] font-bold text-ink-600 md:grid">
-        <span className="whitespace-nowrap">관리번호</span>
-        <span className="whitespace-nowrap">상태</span>
-        <span className="whitespace-nowrap">지시 제목 · 최근 기준일 · 긴급 여부</span>
-        <span className="whitespace-nowrap text-center">상세 보기</span>
-      </div>
+    <div className="overflow-x-auto rounded-[22px] border border-ink-200 bg-white shadow-[0_14px_34px_rgba(6,18,38,0.06)]">
+      <div className="min-w-[54rem]">
+        <div className="hidden grid-cols-[8rem_4.5rem_minmax(22rem,1fr)_7.5rem_4.75rem_4.75rem] gap-2 border-b border-ink-100 bg-ink-50 px-3 py-2 text-[11px] font-bold text-ink-600 md:grid">
+          <span className="whitespace-nowrap">관리번호</span>
+          <span className="whitespace-nowrap">상태</span>
+          <span className="whitespace-nowrap">제목</span>
+          <span className="whitespace-nowrap">최근 기준</span>
+          <span className="whitespace-nowrap">긴급</span>
+          <span className="whitespace-nowrap text-center">상세</span>
+        </div>
 
-      <div className="divide-y divide-ink-100">
-        {items.map((item) => {
-          const statusLabel = getDirectiveStatusLabel(item.status);
-          const dateLabel = formatDateTimeLabel(item.updated_at ?? item.created_at);
-          const isRiskRow = item.status === "DELAYED" || item.is_urgent;
+        <div className="divide-y divide-ink-100">
+          {items.map((item) => {
+            const statusLabel = getDirectiveStatusLabel(item.status);
+            const dateLabel = formatDateTimeLabel(item.updated_at ?? item.created_at);
+            const isRiskRow = item.status === "DELAYED" || item.is_urgent;
 
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                "grid gap-2 px-3 py-3 transition hover:bg-brand-50/70 md:grid-cols-[7rem_4rem_minmax(18rem,1fr)_4.25rem] md:items-center",
-                isRiskRow && "bg-danger-50/45",
-              )}
-            >
-              <div>
-                <p className="text-[11px] font-bold text-ink-500 md:hidden">관리번호</p>
-                <p className="truncate text-sm font-bold text-ink-950">{item.directive_no}</p>
-              </div>
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  "grid gap-2 px-3 py-2.5 transition hover:bg-brand-50/70 md:grid-cols-[8rem_4.5rem_minmax(22rem,1fr)_7.5rem_4.75rem_4.75rem] md:items-center",
+                  isRiskRow && "bg-danger-50/45",
+                )}
+              >
+                <div>
+                  <p className="text-[11px] font-bold text-ink-500 md:hidden">관리번호</p>
+                  <p className="truncate text-sm font-bold text-ink-950">{item.directive_no}</p>
+                </div>
 
-              <div>
-                <p className="text-[11px] font-bold text-ink-500 md:hidden">상태</p>
-                <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-bold", statusClassName(item.status, item.is_urgent))}>
-                  {statusLabel}
-                </span>
-              </div>
+                <div>
+                  <p className="text-[11px] font-bold text-ink-500 md:hidden">상태</p>
+                  <span className={cn("inline-flex items-center rounded-full border px-2 py-1 text-xs font-bold", statusClassName(item.status, item.is_urgent))}>
+                    {statusLabel}
+                  </span>
+                </div>
 
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold text-ink-500 md:hidden">지시 제목</p>
-                <p className="whitespace-normal break-keep text-sm font-bold leading-snug text-ink-950" title={item.title}>
-                  {item.title}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="text-[11px] font-bold text-ink-500 md:hidden">최근 기준일</p>
-                  <span className="text-xs font-semibold text-ink-700">{dateLabel}</span>
-                  <p className="text-[11px] font-bold text-ink-500 md:hidden">긴급 여부</p>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold text-ink-500 md:hidden">제목</p>
+                  <p className="truncate text-sm font-bold leading-snug text-ink-950" title={item.title}>
+                    {item.title}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-bold text-ink-500 md:hidden">최근 기준</p>
+                  <span className="block truncate text-xs font-semibold text-ink-700">{dateLabel}</span>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-bold text-ink-500 md:hidden">긴급</p>
                   {item.is_urgent ? (
                     <span className="inline-flex rounded-full border border-danger-200 bg-danger-50 px-2 py-0.5 text-[11px] font-bold text-danger-700">
                       {URGENT_STATUS_LABEL}
@@ -89,18 +97,18 @@ export function DirectiveList({ items }: DirectiveListProps) {
                     </span>
                   )}
                 </div>
-              </div>
 
-              <Link
-                href={`/directives/${item.id}`}
-                aria-label={`${item.directive_no} 상세 보기`}
-                className="management-clickable inline-flex min-h-10 items-center justify-center rounded-[14px] border border-brand-100 bg-brand-50 px-3 py-2 text-xs font-bold text-brand-900 shadow-[0_8px_18px_rgba(3,19,38,0.08)] transition hover:bg-white"
-              >
-                상세
-              </Link>
-            </div>
-          );
-        })}
+                <Link
+                  href={`/directives/${item.id}`}
+                  aria-label={`${item.directive_no} 상세 보기`}
+                  className="management-clickable inline-flex min-h-10 items-center justify-center rounded-[14px] border border-brand-100 bg-brand-50 px-3 py-2 text-xs font-bold text-brand-900 shadow-[0_8px_18px_rgba(3,19,38,0.08)] transition hover:bg-white"
+                >
+                  상세
+                </Link>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
