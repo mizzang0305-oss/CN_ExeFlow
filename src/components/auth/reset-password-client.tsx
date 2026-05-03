@@ -1,57 +1,84 @@
 "use client";
 
 import Link from "next/link";
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { FieldGroup, FieldLabel, Input } from "@/components/ui/field";
 
-type RecoveryStatus = "checking" | "expired" | "invalid" | "ready" | "success";
+type State = "checking" | "ready" | "expired" | "error" | "success";
 
-function isUnavailableResetLink(error: string | null, errorCode: string | null) {
-  return error === "access_denied" || errorCode === "otp_expired";
+function readUrlParams() {
+  if (typeof window === "undefined") {
+    return {
+      hashParams: new URLSearchParams(),
+      queryParams: new URLSearchParams(),
+    };
+  }
+
+  return {
+    hashParams: new URLSearchParams(window.location.hash.replace(/^#/, "")),
+    queryParams: new URLSearchParams(window.location.search),
+  };
+}
+
+function hasUnavailableResetLink(queryParams: URLSearchParams, hashParams: URLSearchParams) {
+  const error = queryParams.get("error") ?? hashParams.get("error");
+  const errorCode = queryParams.get("error_code") ?? hashParams.get("error_code");
+  const errorDescription = queryParams.get("error_description") ?? hashParams.get("error_description");
+
+  return error === "access_denied" || errorCode === "otp_expired" || Boolean(errorDescription);
+}
+
+function cleanResetUrl() {
+  if (typeof window !== "undefined") {
+    window.history.replaceState({}, document.title, "/reset-password");
+  }
 }
 
 export function ResetPasswordClient() {
-  const searchParams = useSearchParams();
-  const queryString = searchParams.toString();
-  const [status, setStatus] = useState<RecoveryStatus>("checking");
+  const [state, setState] = useState<State>("checking");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  const [isPasswordPending, setIsPasswordPending] = useState(false);
+  const [isResetPending, setIsResetPending] = useState(false);
+
   const title = useMemo(() => {
-    if (status === "success") {
+    if (state === "success") {
       return "비밀번호를 변경했습니다";
     }
 
     return "비밀번호 재설정";
-  }, [status]);
+  }, [state]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function prepareRecoverySession() {
-      setStatus("checking");
+      setState("checking");
       setErrorMessage(null);
+      setMessage(null);
 
-      const error = searchParams.get("error");
-      const errorCode = searchParams.get("error_code");
+      const { hashParams, queryParams } = readUrlParams();
 
-      if (isUnavailableResetLink(error, errorCode)) {
-        setStatus("expired");
+      if (hasUnavailableResetLink(queryParams, hashParams)) {
+        setState("expired");
         return;
       }
 
-      const supabase = createSupabaseBrowserClient();
-      const code = searchParams.get("code");
-      const tokenHash = searchParams.get("token_hash");
-
       try {
+        const supabase = createSupabaseBrowserClient();
+        const code = queryParams.get("code");
+        const tokenHash = queryParams.get("token_hash") ?? hashParams.get("token_hash");
+        const accessToken = hashParams.get("access_token") ?? queryParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token") ?? queryParams.get("refresh_token");
+
         if (code) {
           const result = await supabase.auth.exchangeCodeForSession(code);
 
@@ -59,7 +86,7 @@ export function ResetPasswordClient() {
             throw result.error;
           }
 
-          window.history.replaceState({}, document.title, "/reset-password");
+          cleanResetUrl();
         } else if (tokenHash) {
           const result = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
@@ -70,22 +97,35 @@ export function ResetPasswordClient() {
             throw result.error;
           }
 
-          window.history.replaceState({}, document.title, "/reset-password");
-        } else {
-          const result = await supabase.auth.getSession();
+          cleanResetUrl();
+        } else if (accessToken && refreshToken) {
+          const result = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
 
-          if (result.error || !result.data.session) {
-            setStatus("invalid");
-            return;
+          if (result.error) {
+            throw result.error;
           }
+
+          cleanResetUrl();
+        }
+
+        const sessionResult = await supabase.auth.getSession();
+
+        if (sessionResult.error || !sessionResult.data.session) {
+          if (isMounted) {
+            setState("error");
+          }
+          return;
         }
 
         if (isMounted) {
-          setStatus("ready");
+          setState("ready");
         }
       } catch {
         if (isMounted) {
-          setStatus("expired");
+          setState("error");
         }
       }
     }
@@ -95,9 +135,9 @@ export function ResetPasswordClient() {
     return () => {
       isMounted = false;
     };
-  }, [queryString, searchParams]);
+  }, []);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
     setMessage(null);
@@ -112,10 +152,18 @@ export function ResetPasswordClient() {
       return;
     }
 
-    setIsPending(true);
+    setIsPasswordPending(true);
 
     try {
       const supabase = createSupabaseBrowserClient();
+      const sessionResult = await supabase.auth.getSession();
+
+      if (sessionResult.error || !sessionResult.data.session) {
+        setState("error");
+        setErrorMessage("비밀번호 재설정 인증이 필요합니다.");
+        return;
+      }
+
       const result = await supabase.auth.updateUser({ password });
 
       if (result.error) {
@@ -126,11 +174,48 @@ export function ResetPasswordClient() {
       setPassword("");
       setPasswordConfirm("");
       setMessage("비밀번호를 변경했습니다. 다시 로그인해주세요.");
-      setStatus("success");
+      setState("success");
     } catch {
       setErrorMessage("비밀번호를 변경하지 못했습니다. 재설정 링크를 다시 확인해주세요.");
     } finally {
-      setIsPending(false);
+      setIsPasswordPending(false);
+    }
+  }
+
+  async function handleResetEmailSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage(null);
+    setMessage(null);
+
+    const email = resetEmail.trim().toLowerCase();
+
+    if (!email) {
+      setErrorMessage("이메일을 입력해주세요.");
+      return;
+    }
+
+    setIsResetPending(true);
+
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        body: JSON.stringify({ email }),
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("RESET_REQUEST_FAILED");
+      }
+
+      setResetEmail("");
+      setMessage("비밀번호 재설정 메일을 보냈습니다. 메일의 안내에 따라 다시 설정해주세요.");
+    } catch {
+      setErrorMessage("비밀번호 재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsResetPending(false);
     }
   }
 
@@ -144,38 +229,41 @@ export function ResetPasswordClient() {
           <p className="text-sm font-bold text-brand-700">CN EXEFLOW</p>
           <h1 className="mt-3 text-3xl font-bold text-ink-950">{title}</h1>
 
-          {status === "checking" ? (
-            <p className="mt-4 text-sm font-semibold text-ink-700">재설정 링크를 확인하고 있습니다.</p>
-          ) : null}
-
-          {status === "expired" ? (
-            <div className="mt-5 rounded-[24px] border border-warning-200 bg-warning-50 px-5 py-5">
-              <p className="text-lg font-bold text-warning-900">비밀번호 재설정 링크가 만료되었습니다.</p>
-              <p className="mt-2 text-sm font-semibold text-warning-800">다시 재설정 메일을 요청해주세요.</p>
-              <Link
-                href="/login?mode=reset"
-                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[20px] bg-brand-900 px-5 text-sm font-bold text-white shadow-[0_18px_34px_rgba(7,32,63,0.22)]"
-              >
-                재설정 메일 다시 받기
-              </Link>
+          {state === "checking" ? (
+            <div className="mt-5 rounded-[24px] border border-brand-100 bg-brand-50/80 px-5 py-5">
+              <p className="text-lg font-bold text-brand-950">비밀번호 재설정 화면을 준비하고 있습니다.</p>
+              <p className="mt-2 text-sm font-semibold text-brand-800">인증 정보를 확인하는 중입니다.</p>
             </div>
           ) : null}
 
-          {status === "invalid" ? (
-            <div className="mt-5 rounded-[24px] border border-warning-200 bg-warning-50 px-5 py-5">
-              <p className="text-lg font-bold text-warning-900">재설정 세션을 확인하지 못했습니다.</p>
-              <p className="mt-2 text-sm font-semibold text-warning-800">다시 재설정 메일을 요청해주세요.</p>
-              <Link
-                href="/login?mode=reset"
-                className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[20px] bg-brand-900 px-5 text-sm font-bold text-white shadow-[0_18px_34px_rgba(7,32,63,0.22)]"
-              >
-                재설정 메일 다시 받기
-              </Link>
-            </div>
+          {state === "expired" ? (
+            <ResetRequestPanel
+              description="다시 재설정 메일을 요청해주세요."
+              email={resetEmail}
+              errorMessage={errorMessage}
+              isPending={isResetPending}
+              message={message}
+              onEmailChange={setResetEmail}
+              onSubmit={handleResetEmailSubmit}
+              title="비밀번호 재설정 링크가 만료되었습니다."
+            />
           ) : null}
 
-          {status === "ready" ? (
-            <form className="mt-6 space-y-4" onSubmit={(event) => void handleSubmit(event)}>
+          {state === "error" ? (
+            <ResetRequestPanel
+              description="메일의 재설정 링크를 다시 열어주세요."
+              email={resetEmail}
+              errorMessage={errorMessage}
+              isPending={isResetPending}
+              message={message}
+              onEmailChange={setResetEmail}
+              onSubmit={handleResetEmailSubmit}
+              title="비밀번호 재설정 인증이 필요합니다."
+            />
+          ) : null}
+
+          {state === "ready" ? (
+            <form className="mt-6 space-y-4" onSubmit={(event) => void handlePasswordSubmit(event)}>
               <p className="text-sm font-semibold leading-6 text-ink-700">새 비밀번호를 입력해주세요.</p>
               <FieldGroup>
                 <FieldLabel label="새 비밀번호" required />
@@ -195,13 +283,13 @@ export function ResetPasswordClient() {
                   placeholder="새 비밀번호를 다시 입력해주세요"
                 />
               </FieldGroup>
-              <Button type="submit" block size="lg" isLoading={isPending} loadingLabel="변경 중">
-                비밀번호 변경
+              <Button type="submit" block size="lg" isLoading={isPasswordPending} loadingLabel="변경 중입니다">
+                비밀번호 변경하기
               </Button>
             </form>
           ) : null}
 
-          {status === "success" ? (
+          {state === "success" ? (
             <div className="mt-5 rounded-[24px] border border-success-200 bg-success-50 px-5 py-5">
               <p className="text-base font-bold text-success-800">{message ?? "비밀번호를 변경했습니다."}</p>
               <p className="mt-2 text-sm font-semibold text-success-700">다시 로그인해주세요.</p>
@@ -209,12 +297,12 @@ export function ResetPasswordClient() {
                 href="/login"
                 className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[20px] bg-brand-900 px-5 text-sm font-bold text-white shadow-[0_18px_34px_rgba(7,32,63,0.22)]"
               >
-                로그인 화면으로 이동
+                로그인으로 이동
               </Link>
             </div>
           ) : null}
 
-          {errorMessage ? (
+          {state === "ready" && errorMessage ? (
             <div className="mt-4 rounded-[24px] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700">
               {errorMessage}
             </div>
@@ -222,5 +310,60 @@ export function ResetPasswordClient() {
         </section>
       </div>
     </main>
+  );
+}
+
+function ResetRequestPanel({
+  description,
+  email,
+  errorMessage,
+  isPending,
+  message,
+  onEmailChange,
+  onSubmit,
+  title,
+}: {
+  description: string;
+  email: string;
+  errorMessage: string | null;
+  isPending: boolean;
+  message: string | null;
+  onEmailChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  title: string;
+}) {
+  return (
+    <div className="mt-5 rounded-[24px] border border-warning-200 bg-warning-50 px-5 py-5">
+      <p className="text-lg font-bold text-warning-900">{title}</p>
+      <p className="mt-2 text-sm font-semibold text-warning-800">{description}</p>
+      <p className="mt-4 text-sm font-bold text-ink-900">재설정 메일 다시 받기</p>
+
+      <form className="mt-4 space-y-4" onSubmit={(event) => void onSubmit(event)}>
+        <FieldGroup>
+          <FieldLabel label="이메일" required />
+          <Input
+            type="email"
+            value={email}
+            onChange={(event) => onEmailChange(event.target.value)}
+            placeholder="회사 이메일을 입력해주세요"
+          />
+        </FieldGroup>
+        <Button type="submit" block size="lg" isLoading={isPending} loadingLabel="발송 중입니다">
+          재설정 메일 다시 보내기
+        </Button>
+      </form>
+
+      {message ? (
+        <div className="mt-4 rounded-[20px] border border-success-200 bg-success-50 px-4 py-3 text-sm font-bold text-success-800">
+          {message}
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="mt-4 rounded-[20px] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700">
+          {errorMessage}
+        </div>
+      ) : null}
+    </div>
   );
 }

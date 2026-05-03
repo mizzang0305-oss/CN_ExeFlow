@@ -20,6 +20,10 @@ export function GET(request: Request) {
   const resetUrl = new URL(getPasswordResetRedirectTo());
   resetUrl.pathname = RESET_PASSWORD_PATH;
 
+  if (requestUrl.searchParams.get("error")) {
+    resetUrl.searchParams.set("error", requestUrl.searchParams.get("error") ?? "access_denied");
+  }
+
   for (const key of FORWARDED_PARAMS) {
     const value = requestUrl.searchParams.get(key);
 
