@@ -9,6 +9,15 @@ export const dynamic = "force-dynamic";
 export default async function CeoDashboardPage() {
   const session = await requireDashboardSession("/dashboard/ceo");
 
+  if (!session?.userId) {
+    return (
+      <ErrorState
+        title="세션이 유효하지 않습니다"
+        description="다시 로그인해주세요."
+      />
+    );
+  }
+
   let data: Awaited<ReturnType<typeof getCeoDashboardData>> | null = null;
   let errorMessage: string | null = null;
 

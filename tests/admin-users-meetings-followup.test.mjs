@@ -116,18 +116,33 @@ test("회의록 관리는 저장, 분석, 선택 등록 흐름을 제공한다",
   assert.match(appFrame, /회의록 관리/);
 });
 
-test("슈퍼관리자 사용자 화면 전환은 세션 변경 없이 대리 확인 배너와 감사 기록을 남긴다", () => {
+test("슈퍼관리자 사용자 화면 전환은 서버 세션을 바꾸지 않고 브라우저 상태만 사용한다", () => {
   const authService = read("src/features/auth/service.ts");
   const switcher = read("src/components/app/impersonation-switcher.tsx");
   const route = read("src/app/api/admin/impersonation/route.ts");
+  const constants = read("src/features/auth/constants.ts");
+  const sessionTypes = read("src/features/auth/types.ts");
 
-  assert.match(authService, /startImpersonationAsSession/);
-  assert.match(authService, /IMPERSONATION_STARTED/);
-  assert.match(authService, /impersonation/);
+  assert.doesNotMatch(constants, /APP_IMPERSONATION_COOKIE/);
+  assert.doesNotMatch(sessionTypes, /impersonation\?:/);
+  assert.doesNotMatch(authService, /startImpersonationAsSession/);
+  assert.doesNotMatch(authService, /stopImpersonationAsSession/);
+  assert.doesNotMatch(authService, /applyImpersonation/);
+  assert.doesNotMatch(authService, /decodeImpersonationCookie/);
+  assert.doesNotMatch(authService, /setImpersonationCookie/);
+  assert.doesNotMatch(authService, /cookieStore\.set\(APP_IMPERSONATION_COOKIE/);
+  assert.doesNotMatch(authService, /cookieStore\.delete\(APP_IMPERSONATION_COOKIE/);
+  assert.doesNotMatch(route, /POST\(request/);
+  assert.doesNotMatch(route, /DELETE\(/);
+  assert.doesNotMatch(route, /readJsonBody/);
+  assert.doesNotMatch(route, /startImpersonationAsSession|stopImpersonationAsSession/);
+  assert.match(route, /getCurrentSession/);
+  assert.match(switcher, /cn\.impersonation/);
+  assert.match(switcher, /localStorage\.setItem/);
+  assert.match(switcher, /localStorage\.removeItem/);
   assert.match(switcher, /사용자 화면 전환/);
   assert.match(switcher, /대리 확인 중/);
   assert.match(switcher, /슈퍼관리자로 돌아가기/);
-  assert.match(route, /getCurrentActorSession/);
 });
 
 test("새로 추가된 사용자 노출 문구는 한국어만 사용한다", () => {

@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AppSession, UserRole } from "@/features/auth/types";
 import { isAdminRole } from "@/features/auth/utils";
 import { readApiResponse } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
+
+export type ImpersonationState = {
+  active: boolean;
+  userId: string | null;
+  userName: string | null;
+};
 
 type ImpersonationUser = {
   departmentName: string | null;
@@ -21,14 +27,99 @@ type ImpersonationUsersResponse = {
   users: ImpersonationUser[];
 };
 
+const IMPERSONATION_STORAGE_KEY = "cn.impersonation";
+const IMPERSONATION_CHANGED_EVENT = "cn.impersonation.changed";
+const EMPTY_IMPERSONATION: ImpersonationState = {
+  active: false,
+  userId: null,
+  userName: null,
+};
+
+function readImpersonationState(): ImpersonationState {
+  if (typeof window === "undefined") {
+    return EMPTY_IMPERSONATION;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(IMPERSONATION_STORAGE_KEY);
+
+    if (!rawValue) {
+      return EMPTY_IMPERSONATION;
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<ImpersonationState>;
+
+    if (parsed.active !== true || typeof parsed.userId !== "string" || typeof parsed.userName !== "string") {
+      return EMPTY_IMPERSONATION;
+    }
+
+    return {
+      active: true,
+      userId: parsed.userId,
+      userName: parsed.userName,
+    };
+  } catch {
+    return EMPTY_IMPERSONATION;
+  }
+}
+
+function notifyImpersonationChanged() {
+  window.dispatchEvent(new CustomEvent(IMPERSONATION_CHANGED_EVENT));
+}
+
+function storeImpersonationState(state: ImpersonationState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(IMPERSONATION_STORAGE_KEY, JSON.stringify(state));
+  notifyImpersonationChanged();
+}
+
+function clearImpersonationState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(IMPERSONATION_STORAGE_KEY);
+  notifyImpersonationChanged();
+}
+
+export function useStoredImpersonationState() {
+  const [state, setState] = useState<ImpersonationState>(EMPTY_IMPERSONATION);
+
+  useEffect(() => {
+    function syncState() {
+      setState(readImpersonationState());
+    }
+
+    syncState();
+    window.addEventListener("storage", syncState);
+    window.addEventListener(IMPERSONATION_CHANGED_EVENT, syncState);
+
+    return () => {
+      window.removeEventListener("storage", syncState);
+      window.removeEventListener(IMPERSONATION_CHANGED_EVENT, syncState);
+    };
+  }, []);
+
+  return state;
+}
+
 export function ImpersonationSwitcher({ session }: { session: AppSession }) {
   const [users, setUsers] = useState<ImpersonationUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [isPending, setIsPending] = useState(false);
-  const canSwitchUser = isAdminRole(session.role) && !session.impersonation;
+  const impersonation = useStoredImpersonationState();
+  const canSwitchUser = Boolean(session?.userId) && isAdminRole(session.role);
+  const selectedUser = useMemo(
+    () => users.find((user) => user.id === selectedUserId) ?? null,
+    [selectedUserId, users],
+  );
 
   useEffect(() => {
     if (!canSwitchUser) {
+      clearImpersonationState();
       return;
     }
 
@@ -51,6 +142,11 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
         if (isMounted) {
           setUsers([]);
         }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsPending(false);
+        }
       });
 
     return () => {
@@ -58,62 +154,43 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
     };
   }, [canSwitchUser, session.userId]);
 
-  async function startSwitch() {
-    if (!selectedUserId) {
+  function startSwitch() {
+    if (!selectedUser) {
       return;
     }
 
-    setIsPending(true);
-
-    try {
-      const response = await fetch("/api/admin/impersonation", {
-        body: JSON.stringify({ userId: selectedUserId }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const data = await readApiResponse<{ redirectTo: string }>(response);
-      window.location.href = data.redirectTo;
-    } finally {
-      setIsPending(false);
-    }
+    storeImpersonationState({
+      active: true,
+      userId: selectedUser.id,
+      userName: selectedUser.displayName,
+    });
   }
 
-  async function stopSwitch() {
-    setIsPending(true);
-
-    try {
-      const response = await fetch("/api/admin/impersonation", {
-        method: "DELETE",
-      });
-      const data = await readApiResponse<{ redirectTo: string }>(response);
-      window.location.href = data.redirectTo;
-    } finally {
-      setIsPending(false);
-    }
+  function stopSwitch() {
+    clearImpersonationState();
+    window.location.reload();
   }
 
-  if (session.impersonation) {
+  if (!canSwitchUser) {
+    return null;
+  }
+
+  if (impersonation.active) {
     return (
       <div className="rounded-[24px] border border-warning-200 bg-warning-50 px-4 py-3 text-ink-950">
-        <p className="text-sm font-bold">대리 확인 중: {session.impersonation.impersonatedDisplayName}</p>
-        <p className="mt-1 text-xs font-semibold text-ink-700">실제 로그인 계정: {session.impersonation.actorDisplayName}</p>
+        <p className="text-sm font-bold">대리 확인 중: {impersonation.userName}</p>
+        <p className="mt-1 text-xs font-semibold text-ink-700">실제 로그인 계정: {session.displayName}</p>
         <Button
           type="button"
           variant="secondary"
           size="sm"
           className="mt-3"
-          isLoading={isPending}
-          loadingLabel="돌아가는 중"
-          onClick={() => void stopSwitch()}
+          onClick={stopSwitch}
         >
           슈퍼관리자로 돌아가기
         </Button>
       </div>
     );
-  }
-
-  if (!canSwitchUser) {
-    return null;
   }
 
   return (
@@ -140,10 +217,10 @@ export function ImpersonationSwitcher({ session }: { session: AppSession }) {
           type="button"
           variant="ghost"
           size="sm"
-          disabled={!selectedUserId}
+          disabled={!selectedUserId || isPending}
           isLoading={isPending}
-          loadingLabel="전환 중"
-          onClick={() => void startSwitch()}
+          loadingLabel="확인 중"
+          onClick={startSwitch}
         >
           전환
         </Button>

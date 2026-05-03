@@ -14,7 +14,6 @@ import {
 } from "@/lib/supabase";
 
 import {
-  APP_IMPERSONATION_COOKIE,
   APP_SESSION_COOKIE,
   APP_SESSION_MAX_AGE_DEFAULT_SECONDS,
   APP_SESSION_MAX_AGE_REMEMBER_SECONDS,
@@ -84,13 +83,6 @@ type SessionCookiePayload = {
   userId: string;
 };
 
-type ImpersonationCookiePayload = {
-  actorUserId: string;
-  expiresAt: string;
-  impersonatedUserId: string;
-  startedAt: string;
-};
-
 function buildDisplayName(user: Pick<UserRow, "name" | "profile_name">) {
   const profileName = user.profile_name?.trim();
   return profileName && profileName.length > 0 ? profileName : user.name;
@@ -130,38 +122,6 @@ function decodeSessionCookie(rawValue: string | undefined) {
   }
 }
 
-function encodeImpersonationCookie(payload: ImpersonationCookiePayload) {
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-}
-
-function decodeImpersonationCookie(rawValue: string | undefined) {
-  if (!rawValue) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(Buffer.from(rawValue, "base64url").toString("utf8")) as Partial<ImpersonationCookiePayload>;
-
-    if (
-      typeof parsed.actorUserId !== "string" ||
-      typeof parsed.impersonatedUserId !== "string" ||
-      typeof parsed.startedAt !== "string" ||
-      typeof parsed.expiresAt !== "string"
-    ) {
-      return null;
-    }
-
-    return {
-      actorUserId: parsed.actorUserId,
-      expiresAt: parsed.expiresAt,
-      impersonatedUserId: parsed.impersonatedUserId,
-      startedAt: parsed.startedAt,
-    } satisfies ImpersonationCookiePayload;
-  } catch {
-    return null;
-  }
-}
-
 async function setAppSessionCookie(payload: SessionCookiePayload) {
   const cookieStore = await cookies();
 
@@ -179,23 +139,6 @@ async function setAppSessionCookie(payload: SessionCookiePayload) {
 async function deleteAppSessionCookie() {
   const cookieStore = await cookies();
   cookieStore.delete(APP_SESSION_COOKIE);
-}
-
-async function setImpersonationCookie(payload: ImpersonationCookiePayload) {
-  const cookieStore = await cookies();
-
-  cookieStore.set(APP_IMPERSONATION_COOKIE, encodeImpersonationCookie(payload), {
-    httpOnly: true,
-    maxAge: APP_SESSION_MAX_AGE_DEFAULT_SECONDS,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  });
-}
-
-async function deleteImpersonationCookie() {
-  const cookieStore = await cookies();
-  cookieStore.delete(APP_IMPERSONATION_COOKIE);
 }
 
 async function getDepartmentRecord(departmentId: string | null) {
@@ -830,10 +773,9 @@ export async function requestPasswordReset(input: PasswordResetRequestInput) {
 
 export async function clearAppSession() {
   await deleteAppSessionCookie();
-  await deleteImpersonationCookie();
 }
 
-export async function getCurrentActorSession(): Promise<AppSession | null> {
+export async function getCurrentSession(): Promise<AppSession | null> {
   const cookieStore = await cookies();
   const rawValue = cookieStore.get(APP_SESSION_COOKIE)?.value;
   const payload = decodeSessionCookie(rawValue);
@@ -870,57 +812,6 @@ export async function getCurrentActorSession(): Promise<AppSession | null> {
   return buildSession(user, department);
 }
 
-async function applyImpersonation(actorSession: AppSession): Promise<AppSession> {
-  const cookieStore = await cookies();
-  const payload = decodeImpersonationCookie(cookieStore.get(APP_IMPERSONATION_COOKIE)?.value);
-
-  if (!payload) {
-    return actorSession;
-  }
-
-  if (!isAdminRole(actorSession.role) || payload.actorUserId !== actorSession.userId) {
-    await deleteImpersonationCookie();
-    return actorSession;
-  }
-
-  if (new Date(payload.expiresAt).getTime() <= Date.now()) {
-    await deleteImpersonationCookie();
-    return actorSession;
-  }
-
-  const impersonatedUser = await findUserById(payload.impersonatedUserId);
-
-  if (!impersonatedUser || !impersonatedUser.is_active || !hasCompanyEmail(impersonatedUser.email)) {
-    await deleteImpersonationCookie();
-    return actorSession;
-  }
-
-  const department = await getDepartmentRecord(impersonatedUser.department_id);
-  const impersonatedSession = buildSession(impersonatedUser, department);
-
-  return {
-    ...impersonatedSession,
-    impersonation: {
-      actorDisplayName: actorSession.displayName,
-      actorRole: actorSession.role,
-      actorUserId: actorSession.userId,
-      impersonatedDisplayName: impersonatedSession.displayName,
-      impersonatedUserId: impersonatedSession.userId,
-      startedAt: payload.startedAt,
-    },
-  };
-}
-
-export async function getCurrentSession(): Promise<AppSession | null> {
-  const actorSession = await getCurrentActorSession();
-
-  if (!actorSession) {
-    return null;
-  }
-
-  return applyImpersonation(actorSession);
-}
-
 export async function listImpersonationUsersAsSession(session: AppSession) {
   if (!isAdminRole(session.role)) {
     throw new ApiError(403, "일반유저는 사용할 수 없습니다.", null, "IMPERSONATION_DENIED");
@@ -948,57 +839,6 @@ export async function listImpersonationUsersAsSession(session: AppSession) {
     role: user.role,
     title: user.title,
   }));
-}
-
-export async function startImpersonationAsSession(session: AppSession, impersonatedUserId: string) {
-  if (!isAdminRole(session.role)) {
-    throw new ApiError(403, "일반유저는 사용할 수 없습니다.", null, "IMPERSONATION_DENIED");
-  }
-
-  const targetUser = await findUserById(impersonatedUserId);
-
-  if (!targetUser || !targetUser.is_active) {
-    throw new ApiError(404, "전환할 사용자를 찾을 수 없습니다.", null, "IMPERSONATION_USER_NOT_FOUND");
-  }
-
-  const startedAt = new Date();
-  const expiresAt = new Date(startedAt.getTime() + APP_SESSION_MAX_AGE_DEFAULT_SECONDS * 1000);
-  await setImpersonationCookie({
-    actorUserId: session.userId,
-    expiresAt: expiresAt.toISOString(),
-    impersonatedUserId,
-    startedAt: startedAt.toISOString(),
-  });
-
-  const client = createSupabaseServerClient();
-  await recordHistory(client, {
-    action: "IMPERSONATION_STARTED",
-    actorId: session.userId,
-    afterData: {
-      impersonatedUserId,
-      impersonatedUserName: buildDisplayName(targetUser),
-      startedAt: startedAt.toISOString(),
-    },
-    entityId: impersonatedUserId,
-    entityType: "user",
-    metadata: {
-      actorDisplayName: session.displayName,
-      mode: "사용자 화면 전환",
-    },
-  });
-
-  return {
-    impersonatedDisplayName: buildDisplayName(targetUser),
-    redirectTo: getDefaultAppRoute(targetUser.role),
-  };
-}
-
-export async function stopImpersonationAsSession() {
-  await deleteImpersonationCookie();
-
-  return {
-    redirectTo: "/dashboard/ceo",
-  };
 }
 
 export async function requireCurrentSession() {
