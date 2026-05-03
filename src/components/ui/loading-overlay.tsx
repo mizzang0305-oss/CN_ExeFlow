@@ -44,9 +44,7 @@ export function LoadingOverlay({
             </div>
 
             <div className="space-y-2 opacity-0 animate-[cn-loading-fade_240ms_ease_forwards]">
-              <p className="text-xs font-semibold text-brand-100/80">
-                CN EXEFLOW
-              </p>
+              <p className="text-xs font-semibold text-brand-100/80">CN EXEFLOW</p>
               <p className="text-2xl font-semibold text-white">{message}</p>
               <p className="mx-auto max-w-sm text-sm leading-6 text-white/72">{submessage}</p>
             </div>

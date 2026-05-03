@@ -43,6 +43,15 @@ function buildSummaryCards(data: CeoDashboardData): SummaryCard[] {
       value: `${summary.totalCount}`,
     },
     {
+      accentClassName: "bg-ink-700",
+      ariaLabel: "전체 대기 지시사항 보기",
+      label: "대기",
+      shape: "ring",
+      status: "NEW",
+      urgent: false,
+      value: `${summary.newCount}`,
+    },
+    {
       accentClassName: "bg-brand-600",
       ariaLabel: "전체 진행중 지시사항 보기",
       label: "진행중",
@@ -244,22 +253,19 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     urgent: urgentOnly,
   });
 
-  const selectDepartment = useCallback(
-    (departmentId: string) => {
-      setSelectedScope("department");
-      setSelectedDepartmentId(departmentId);
-      setSelectedStatus(null);
-      setUrgentOnly(false);
-      setPage(1);
-      replaceUrlSilently({
-        departmentId,
-        scope: "department",
-        status: null,
-        urgent: false,
-      });
-    },
-    [],
-  );
+  const selectDepartment = useCallback((departmentId: string) => {
+    setSelectedScope("department");
+    setSelectedDepartmentId(departmentId);
+    setSelectedStatus(null);
+    setUrgentOnly(false);
+    setPage(1);
+    replaceUrlSilently({
+      departmentId,
+      scope: "department",
+      status: null,
+      urgent: false,
+    });
+  }, []);
 
   const selectDepartmentStatus = useCallback(
     (departmentId: string, status: DirectiveStatusValue | null, urgent = false) => {
@@ -334,6 +340,28 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     [prefetch],
   );
 
+  const selectSummaryCard = useCallback(
+    (card: SummaryCard) => {
+      if (card.status === "NEW") {
+        selectGlobalStatus("NEW", false);
+        return;
+      }
+
+      if (card.status === "COMPLETION_REQUESTED") {
+        selectGlobalStatus("COMPLETION_REQUESTED", false);
+        return;
+      }
+
+      if (card.urgent) {
+        selectGlobalStatus(null, true);
+        return;
+      }
+
+      selectGlobalStatus(card.status, card.urgent);
+    },
+    [selectGlobalStatus],
+  );
+
   useEffect(() => {
     const applyUrlSelection = () => {
       const { departmentId, scope, status, urgent } = readSelectionFromUrl();
@@ -386,7 +414,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
 
   return (
     <div className="space-y-7">
-      <section aria-label="상단 요약 영역" className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <section aria-label="상단 요약 영역" className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         {summaryCards.map((card) => {
           const isActive = selectedScope === "global" && selectedStatus === card.status && urgentOnly === card.urgent;
 
@@ -396,7 +424,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
               type="button"
               aria-label={card.ariaLabel}
               aria-pressed={isActive}
-              onClick={() => selectGlobalStatus(card.status, card.urgent)}
+              onClick={() => selectSummaryCard(card)}
               onPointerEnter={() => prefetchGlobalStatus(card.status, card.urgent)}
               className={cn(
                 "executive-click-target rounded-[24px] border border-white/80 bg-white px-5 py-5 text-left shadow-[0_18px_42px_rgba(6,18,38,0.08)]",
@@ -428,7 +456,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
           <div>
             <h2 className="text-2xl font-bold text-ink-950">부서 현황</h2>
             <p className="mt-1 text-base font-semibold text-ink-700">
-              부서를 누르면 오른쪽 확인창에서 지시사항이 바로 열립니다.
+              부서를 누르면 오른쪽 확인창에서 지시사항을 바로 확인합니다.
             </p>
           </div>
           <p className="text-sm font-bold text-ink-600">카드와 상태 영역을 선택할 수 있습니다.</p>

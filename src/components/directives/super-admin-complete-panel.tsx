@@ -42,22 +42,21 @@ export function SuperAdminCompletePanel({ directiveId }: SuperAdminCompletePanel
   return (
     <div className="space-y-4 rounded-3xl border border-emerald-200 bg-emerald-50/80 p-5">
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold text-ink-950">슈퍼관리자 통합 완료</h2>
+        <h2 className="text-lg font-semibold text-ink-950">승인권자 통합 완료</h2>
         <p className="text-sm leading-6 text-ink-700">
-          텍스트 로그를 5자 이상 남기면 배정된 모든 부서를 즉시 완료 처리합니다. 기존 부서별 완료 요청과 승인 절차는
-          건너뜁니다.
+          모든 부서의 실행 결과를 확인한 뒤 승인권자가 지시사항을 최종 완료 처리합니다. 담당자는 이 완료 처리를 직접 할 수 없습니다.
         </p>
       </div>
 
       <FieldGroup>
         <FieldLabel
           label="통합 완료 로그"
-          hint="예: 현장 확인과 후속 조치 검토까지 마쳤고 전체 지시사항을 종료합니다."
+          hint="현장 확인, 후속 조치 검토, 승인 근거를 5자 이상 남겨주세요."
         />
         <Textarea
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="완료 근거를 5자 이상 입력해주세요."
+          placeholder="완료 근거를 입력해주세요."
         />
       </FieldGroup>
 

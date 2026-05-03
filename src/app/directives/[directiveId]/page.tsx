@@ -8,6 +8,7 @@ import {
   Card,
   DirectiveStatusBadge,
   EmptyState,
+  FollowUpDirectivePanel,
   LogCard,
   SoftDeleteLogButton,
   SuperAdminCompletePanel,
@@ -15,6 +16,7 @@ import {
   WorkflowActionPanel,
 } from "@/components";
 import { requireCurrentSession } from "@/features/auth";
+import { isAdminRole } from "@/features/auth/utils";
 import { getDirectiveDetailForSession } from "@/features/directives";
 import { formatDateLabel, formatDateTimeLabel, formatRelativeUpdate } from "@/lib";
 
@@ -127,8 +129,18 @@ export default async function DirectiveDetailPage({ params }: DirectiveDetailPag
             </div>
           </Card>
 
-          {session.role === "SUPER_ADMIN" && directive.status !== "COMPLETED" ? (
+          {isAdminRole(session.role) && directive.status !== "COMPLETED" ? (
             <SuperAdminCompletePanel directiveId={directive.id} />
+          ) : null}
+
+          {isAdminRole(session.role) && directive.status !== "COMPLETED" ? (
+            <FollowUpDirectivePanel
+              directiveId={directive.id}
+              departments={directive.departments.map((department) => ({
+                departmentId: department.departmentId,
+                departmentName: department.departmentName,
+              }))}
+            />
           ) : null}
 
           <section className="space-y-4">

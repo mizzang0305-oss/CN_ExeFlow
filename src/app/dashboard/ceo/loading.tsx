@@ -1,4 +1,4 @@
-const kpiPlaceholders = Array.from({ length: 6 }, (_, index) => index);
+const kpiPlaceholders = Array.from({ length: 7 }, (_, index) => index);
 const departmentPlaceholders = Array.from({ length: 6 }, (_, index) => index);
 
 export default function CeoDashboardLoading() {
@@ -17,7 +17,7 @@ export default function CeoDashboardLoading() {
         </div>
       </section>
 
-      <section aria-label="요약 지표 준비 중" className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <section aria-label="요약 지표 준비 중" className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         {kpiPlaceholders.map((item) => (
           <div key={item} className="rounded-[24px] border border-white/80 bg-white px-5 py-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]">
             <div className="flex items-center justify-between gap-3">

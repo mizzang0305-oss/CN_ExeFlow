@@ -11,6 +11,14 @@ export interface AppSession {
   departmentName: string | null;
   displayName: string;
   email: string | null;
+  impersonation?: {
+    actorDisplayName: string;
+    actorRole: UserRole;
+    actorUserId: string;
+    impersonatedDisplayName: string;
+    impersonatedUserId: string;
+    startedAt: string;
+  } | null;
   name: string;
   profileName: string | null;
   role: UserRole;

@@ -20,6 +20,7 @@ function getNavigationItems(session: AppSession): NavigationItem[] {
     return [
       { href: "/dashboard/ceo", label: "대표 대시보드" },
       { href: "/directives", label: "지시 관리" },
+      { href: "/meetings", label: "회의록 관리" },
       { href: "/directives/approval-queue", label: "승인 대기" },
       { href: "/reports", label: "주간 보고" },
       { href: "/admin/auth-logs", label: "접속 로그" },
@@ -39,7 +40,7 @@ function getNavigationItems(session: AppSession): NavigationItem[] {
 
   if (session.role === "STAFF") {
     return [
-      { href: "/workspace", label: "내 실행 공간" },
+      { href: "/workspace", label: "실행 공간" },
       { href: "/directives", label: "지시 현황" },
       { href: "/reports", label: "주간 보고" },
     ];
