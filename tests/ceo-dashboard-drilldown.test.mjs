@@ -166,9 +166,11 @@ test("대표 대시보드는 검색 파라미터 변경으로 전체 화면을 �
   assert.match(dashboardSource, /lg:right-6/);
   assert.match(dashboardSource, /lg:top-6/);
   assert.match(dashboardSource, /lg:bottom-6/);
-  assert.match(dashboardSource, /lg:w-\[520px\]/);
+  assert.match(dashboardSource, /lg:w-\[560px\]/);
+  assert.match(dashboardSource, /2xl:w-\[720px\]/);
   assert.match(dashboardSource, /aria-label="지시사항 확인창"/);
-  assert.match(dashboardSource, /lg:pr-\[590px\]/);
+  assert.match(dashboardSource, /lg:pr-\[620px\]/);
+  assert.match(dashboardSource, /2xl:pr-\[780px\]/);
   assert.match(dashboardSource, /window\.history\.replaceState\(null, "", nextUrl\)/);
   assert.match(dashboardSource, /window\.addEventListener\("popstate"/);
   assert.match(dashboardSource, /max-width: 1023px/);
@@ -237,6 +239,8 @@ test("우측 확인창은 전체 보기와 부서 보기에 맞는 한국어 제
   assert.match(listSource, /관리번호/);
   assert.match(listSource, /최근 기준일/);
   assert.match(listSource, /긴급 여부/);
+  assert.match(listSource, /md:grid-cols-\[7rem_4rem_minmax\(18rem,1fr\)_4\.25rem\]/);
+  assert.match(listSource, /break-keep/);
   assert.doesNotMatch(listSource, /<article\b/);
 });
 

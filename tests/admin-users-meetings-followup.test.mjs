@@ -13,12 +13,27 @@ function read(relativePath) {
 test("초기 사용자 시드는 중복 실행 안전성과 비밀번호 변경 유도를 포함한다", () => {
   const seed = read("scripts/seed-initial-users.mjs");
   const migration = read("supabase/migrations/202605030001_admin_users_meetings_followup.sql");
+  const verificationSql = read("scripts/verify-initial-users.sql");
 
   assert.match(seed, /INITIAL_USER_PASSWORD\s*=\s*["']8639["']/);
+  assert.match(seed, /loadEnvFile\("\.env\.local"\)/);
   assert.match(seed, /createUser/);
   assert.match(seed, /updateUserById/);
   assert.match(seed, /onConflict:\s*["']email["']/);
   assert.match(seed, /must_change_password:\s*true/);
+  assert.match(seed, /code:\s*"ALL"/);
+  assert.match(seed, /code:\s*"MANAGEMENT_CENTER"/);
+  assert.match(seed, /code:\s*"SALES_HQ"/);
+  assert.match(seed, /code:\s*"PURCHASE_LOGISTICS"/);
+  assert.match(seed, /code:\s*"FACTORY_HQ"/);
+  assert.match(seed, /const results = \[\]/);
+  assert.match(seed, /console\.table\(results\)/);
+  assert.match(seed, /status:\s*"성공"/);
+  assert.match(seed, /status:\s*"실패"/);
+  assert.match(seed, /초기 사용자 등록 실패/);
+  assert.match(seed, /existing\.find\(\(item\) => item\.code === department\.code\)\s*\?\?/);
+  assert.match(seed, /isPasswordPolicyError/);
+  assert.match(seed, /passwordFallbackPayload/);
   assert.match(migration, /must_change_password/i);
 
   for (const email of [
@@ -33,10 +48,11 @@ test("초기 사용자 시드는 중복 실행 안전성과 비밀번호 변경 
     "yoo.jy@seanfood.com",
     "cho.ks@seanfood.com",
     "yoo.sh@seanfood.com",
-    "kwon.os@seanfood.com",
-    "kim.jh@seanfood.com",
+    "kwon.os@seanfood.local",
+    "kim.jh@seanfood.local",
   ]) {
     assert.match(seed, new RegExp(email.replaceAll(".", "\\.")));
+    assert.match(verificationSql, new RegExp(email.replaceAll(".", "\\.")));
   }
 });
 
