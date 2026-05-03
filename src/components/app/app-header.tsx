@@ -1,11 +1,13 @@
+"use client";
+
 import Link from "next/link";
 
 import type { AppSession } from "@/features/auth/types";
-import { getDefaultAppRoute, roleLabelMap } from "@/features/auth/utils";
+import { getDefaultAppRoute, isAdminRole, roleLabelMap } from "@/features/auth/utils";
 
 import { StatusPill } from "@/components/ui/status-pill";
 
-import { ImpersonationSwitcher } from "./impersonation-switcher";
+import { ImpersonationSwitcher, useStoredImpersonationState } from "./impersonation-switcher";
 import { LogoutButton } from "./logout-button";
 import { NotificationInboxLink } from "./notification-inbox-link";
 import { type NavigationItem, TopNav } from "./top-nav";
@@ -25,6 +27,15 @@ export function AppHeader({
   session,
   title,
 }: AppHeaderProps) {
+  const impersonation = useStoredImpersonationState();
+  const isImpersonationActive = impersonation.active && isAdminRole(session.role);
+  const effectiveDisplayName = isImpersonationActive && impersonation.userName
+    ? impersonation.userName
+    : session.displayName;
+  const effectiveSubtitle = isImpersonationActive
+    ? "대리 확인 중"
+    : `${session.title ? `${session.title} · ` : ""}${roleLabelMap[session.role]}`;
+
   return (
     <header className="relative overflow-hidden border-b border-brand-950/8 bg-[linear-gradient(180deg,var(--color-brand-950),#0a274b)] text-white shadow-[0_28px_90px_rgba(3,19,38,0.24)]">
       <div className="pointer-events-none brand-grid absolute inset-0 opacity-30" />
@@ -69,11 +80,8 @@ export function AppHeader({
 
               <div className="flex min-h-[76px] flex-1 items-center justify-between rounded-[28px] border border-white/12 bg-white/8 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl lg:max-w-[24rem]">
                 <div>
-                  <p className="text-sm font-semibold text-white">{session.displayName}</p>
-                  <p className="mt-1 text-xs text-white/64">
-                    {session.title ? `${session.title} · ` : ""}
-                    {roleLabelMap[session.role]}
-                  </p>
+                  <p className="text-sm font-semibold text-white">{effectiveDisplayName}</p>
+                  <p className="mt-1 text-xs text-white/64">{effectiveSubtitle}</p>
                 </div>
 
                 <div className="space-y-2 text-right">

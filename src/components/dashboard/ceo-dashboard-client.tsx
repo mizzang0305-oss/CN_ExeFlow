@@ -11,6 +11,7 @@ import {
 import { useDepartmentDirectives } from "@/lib/hooks/useDepartmentDirectives";
 import { cn } from "@/lib/utils";
 
+import { useStoredImpersonationState } from "@/components/app/impersonation-switcher";
 import { DepartmentDirectivePanel } from "@/components/ceo/DepartmentDirectivePanel";
 import { DepartmentProgressCard } from "@/components/ceo/DepartmentProgressCard";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -223,6 +224,7 @@ function replaceUrlSilently({
 }
 
 export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
+  const impersonation = useStoredImpersonationState();
   const [selectedScope, setSelectedScope] = useState<SelectedScope>("none");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<DirectiveStatusValue | null>(null);
@@ -414,6 +416,12 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
 
   return (
     <div className="space-y-7">
+      {impersonation.active && impersonation.userName ? (
+        <div className="rounded-[24px] border border-warning-200 bg-warning-50 px-5 py-4 text-base font-bold text-ink-950 shadow-[0_18px_42px_rgba(245,158,11,0.12)]">
+          대리 확인 중: {impersonation.userName}
+        </div>
+      ) : null}
+
       <section aria-label="상단 요약 영역" className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         {summaryCards.map((card) => {
           const isActive = selectedScope === "global" && selectedStatus === card.status && urgentOnly === card.urgent;
