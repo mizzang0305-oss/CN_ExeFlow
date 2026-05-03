@@ -78,6 +78,8 @@ export function ResetPasswordClient() {
         const tokenHash = queryParams.get("token_hash") ?? hashParams.get("token_hash");
         const accessToken = hashParams.get("access_token") ?? queryParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token") ?? queryParams.get("refresh_token");
+        const hasRecoveryCredential = Boolean(code || tokenHash || (accessToken && refreshToken));
+        let recoverySessionReady = false;
 
         if (code) {
           const result = await supabase.auth.exchangeCodeForSession(code);
@@ -86,6 +88,7 @@ export function ResetPasswordClient() {
             throw result.error;
           }
 
+          recoverySessionReady = Boolean(result.data.session);
           cleanResetUrl();
         } else if (tokenHash) {
           const result = await supabase.auth.verifyOtp({
@@ -97,6 +100,7 @@ export function ResetPasswordClient() {
             throw result.error;
           }
 
+          recoverySessionReady = Boolean(result.data.session);
           cleanResetUrl();
         } else if (accessToken && refreshToken) {
           const result = await supabase.auth.setSession({
@@ -108,7 +112,15 @@ export function ResetPasswordClient() {
             throw result.error;
           }
 
+          recoverySessionReady = Boolean(result.data.session);
           cleanResetUrl();
+        }
+
+        if (hasRecoveryCredential && recoverySessionReady) {
+          if (isMounted) {
+            setState("ready");
+          }
+          return;
         }
 
         const sessionResult = await supabase.auth.getSession();
@@ -250,20 +262,14 @@ export function ResetPasswordClient() {
           ) : null}
 
           {state === "error" ? (
-            <ResetRequestPanel
-              description="메일의 재설정 링크를 다시 열어주세요."
-              email={resetEmail}
-              errorMessage={errorMessage}
-              isPending={isResetPending}
-              message={message}
-              onEmailChange={setResetEmail}
-              onSubmit={handleResetEmailSubmit}
-              title="비밀번호 재설정 인증이 필요합니다."
-            />
+            <AuthRequiredPanel errorMessage={errorMessage} />
           ) : null}
 
           {state === "ready" ? (
             <form className="mt-6 space-y-4" onSubmit={(event) => void handlePasswordSubmit(event)}>
+              <div className="rounded-[22px] border border-success-200 bg-success-50 px-4 py-3">
+                <p className="text-sm font-bold text-success-800">메일 인증이 확인되었습니다.</p>
+              </div>
               <p className="text-sm font-semibold leading-6 text-ink-700">새 비밀번호를 입력해주세요.</p>
               <FieldGroup>
                 <FieldLabel label="새 비밀번호" required />
@@ -310,6 +316,35 @@ export function ResetPasswordClient() {
         </section>
       </div>
     </main>
+  );
+}
+
+function AuthRequiredPanel({ errorMessage }: { errorMessage: string | null }) {
+  return (
+    <div className="mt-5 rounded-[24px] border border-warning-200 bg-warning-50 px-5 py-5">
+      <p className="text-lg font-bold text-warning-900">비밀번호 재설정 인증이 필요합니다.</p>
+      <p className="mt-2 text-sm font-semibold text-warning-800">
+        메일의 재설정 링크에서만 비밀번호를 변경할 수 있습니다.
+      </p>
+      <p className="mt-2 text-sm font-semibold text-warning-800">
+        메일의 재설정 링크를 다시 열어주세요.
+      </p>
+      <p className="mt-2 text-sm font-semibold text-warning-800">
+        만료된 경우에만 재설정 메일을 다시 요청해주세요.
+      </p>
+      <Link
+        href="/login?mode=reset"
+        className="mt-5 inline-flex min-h-11 items-center justify-center rounded-[20px] bg-brand-900 px-5 text-sm font-bold text-white shadow-[0_18px_34px_rgba(7,32,63,0.22)]"
+      >
+        재설정 메일 다시 받기
+      </Link>
+
+      {errorMessage ? (
+        <div className="mt-4 rounded-[20px] border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700">
+          {errorMessage}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
