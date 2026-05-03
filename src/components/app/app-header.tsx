@@ -5,6 +5,7 @@ import { getDefaultAppRoute, roleLabelMap } from "@/features/auth/utils";
 
 import { StatusPill } from "@/components/ui/status-pill";
 
+import { ImpersonationSwitcher } from "./impersonation-switcher";
 import { LogoutButton } from "./logout-button";
 import { NotificationInboxLink } from "./notification-inbox-link";
 import { type NavigationItem, TopNav } from "./top-nav";
@@ -48,25 +49,25 @@ export function AppHeader({
             </div>
 
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-brand-100/70">
-                실행 통제
-              </p>
+              <p className="text-[11px] font-semibold text-brand-100/70">실행 통제</p>
               <h1 className="text-3xl font-semibold text-white sm:text-[2rem]">{title}</h1>
               {description ? <p className="max-w-3xl text-sm leading-7 text-white/74">{description}</p> : null}
             </div>
 
             <div className="flex flex-wrap gap-2">
               <StatusPill tone="muted">{roleLabelMap[session.role]}</StatusPill>
-              <StatusPill tone="muted">{session.departmentName ?? "미지정 부서"}</StatusPill>
-              <StatusPill tone="muted">감사 추적 활성화</StatusPill>
+              <StatusPill tone="muted">{session.departmentName ?? "부서 미지정"}</StatusPill>
+              <StatusPill tone="muted">감사 추적 활성</StatusPill>
             </div>
           </div>
 
-          <div className="flex w-full max-w-[48rem] flex-col gap-4 xl:items-end">
+          <div className="flex w-full max-w-[56rem] flex-col gap-4 xl:items-end">
             <TopNav currentPath={currentPath} items={navigationItems} />
 
-            <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-              <div className="flex min-h-[76px] flex-1 items-center justify-between rounded-[28px] border border-white/12 bg-white/8 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl">
+            <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-end">
+              <ImpersonationSwitcher session={session} />
+
+              <div className="flex min-h-[76px] flex-1 items-center justify-between rounded-[28px] border border-white/12 bg-white/8 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl lg:max-w-[24rem]">
                 <div>
                   <p className="text-sm font-semibold text-white">{session.displayName}</p>
                   <p className="mt-1 text-xs text-white/64">
@@ -76,9 +77,7 @@ export function AppHeader({
                 </div>
 
                 <div className="space-y-2 text-right">
-                  <p className="text-[11px] font-semibold text-brand-100/72">
-                    운영 상태
-                  </p>
+                  <p className="text-[11px] font-semibold text-brand-100/72">운영 상태</p>
                   <div className="loading-bar h-2 w-24 rounded-full bg-white/10">
                     <div className="h-full w-3/4 rounded-full bg-[linear-gradient(90deg,var(--color-brand-500),#93c5fd)]" />
                   </div>

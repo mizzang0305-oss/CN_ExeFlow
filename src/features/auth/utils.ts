@@ -71,8 +71,8 @@ export function getDefaultAppRoute(role: UserRole) {
 
 export const roleLabelMap: Record<UserRole, string> = {
   CEO: "대표",
-  SUPER_ADMIN: "슈퍼 관리자",
   DEPARTMENT_HEAD: "부서장",
-  STAFF: "실무 담당",
+  STAFF: "담당자",
+  SUPER_ADMIN: "슈퍼관리자",
   VIEWER: "조회 전용",
 };

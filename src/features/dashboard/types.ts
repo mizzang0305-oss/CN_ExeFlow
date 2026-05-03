@@ -46,6 +46,7 @@ export interface CeoExecutiveSummary {
   completionRate: number;
   delayedCount: number;
   inProgressCount: number;
+  newCount: number;
   totalCount: number;
   urgentCount: number;
   waitingApprovalCount: number;

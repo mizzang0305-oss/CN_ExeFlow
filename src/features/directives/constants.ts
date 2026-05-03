@@ -13,6 +13,8 @@ export const directiveLogTypes = [
   "ISSUE_RESOLVED",
   "PHOTO_UPLOADED",
   "STATUS_NOTE",
+  "FOLLOW_UP_DIRECTIVE",
+  "ADDITIONAL_INSTRUCTION",
 ] as const;
 
 export const directiveUrgentLevels = ["LOW", "HIGH", "CRITICAL"] as const;
@@ -28,12 +30,14 @@ export const directiveUrgentLevelLabels = {
 } as const;
 
 export const directiveLogTypeLabels = {
-  VISIT: "현장 방문",
+  ADDITIONAL_INSTRUCTION: "추가 지시",
   CALL: "통화",
-  MEETING: "미팅",
   DOCUMENT_SUBMITTED: "문서 제출",
+  FOLLOW_UP_DIRECTIVE: "후속 지시",
   ISSUE_FOUND: "이슈 발견",
   ISSUE_RESOLVED: "이슈 해결",
-  PHOTO_UPLOADED: "사진 업로드",
+  MEETING: "회의",
+  PHOTO_UPLOADED: "사진 등록",
   STATUS_NOTE: "상태 메모",
+  VISIT: "현장 방문",
 } as const;

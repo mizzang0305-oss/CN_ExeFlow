@@ -9,6 +9,7 @@ export * from "./directives/approval-queue-actions";
 export * from "./directives/directive-card";
 export * from "./directives/directive-form";
 export * from "./directives/directive-status-badge";
+export * from "./directives/follow-up-directive-panel";
 export * from "./directives/log-card";
 export * from "./directives/log-form";
 export * from "./directives/soft-delete-log-button";

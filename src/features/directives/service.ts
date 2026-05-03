@@ -993,11 +993,11 @@ function canManageDirectiveLogs(
 }
 
 function canBypassDirectiveLogDepartmentValidation(session: AppSession) {
-  return session.role === "SUPER_ADMIN";
+  return isAdminRole(session.role);
 }
 
 function canCompleteDirectiveAsSuperAdmin(session: AppSession) {
-  return session.role === "SUPER_ADMIN";
+  return isAdminRole(session.role);
 }
 
 function canShowDirectiveCompletionRequest(
@@ -1905,6 +1905,47 @@ export async function createDirectiveLogAsSession(
   return insertResult.data;
 }
 
+export async function createFollowUpDirectiveLogAsSession(
+  session: AppSession,
+  input: {
+    content: string;
+    dueDate: string | null;
+    directiveId: string;
+    isUrgent: boolean;
+    requestDepartmentId: string | null;
+  },
+  files?: FormDataEntryValue[],
+) {
+  if (!isAdminRole(session.role)) {
+    throw new ApiError(403, "추가 지시 등록 권한이 없습니다.", null, "FOLLOW_UP_DIRECTIVE_DENIED");
+  }
+
+  const content = input.content.trim();
+
+  if (content.length < 5) {
+    throw new ApiError(400, "추가 지시 내용을 5자 이상 입력해주세요.", null, "FOLLOW_UP_DIRECTIVE_CONTENT_REQUIRED");
+  }
+
+  const dueDateText = input.dueDate ? `마감일: ${input.dueDate}` : null;
+  const urgentText = input.isUrgent ? "긴급 지시" : null;
+  const detail = [content, dueDateText, urgentText].filter(Boolean).join("\n");
+
+  return createDirectiveLogAsSession(
+    session,
+    {
+      actionSummary: `후속 지시: ${content}`.slice(0, 160),
+      departmentId: input.requestDepartmentId,
+      detail,
+      directiveId: input.directiveId,
+      happenedAt: new Date().toISOString(),
+      logType: "FOLLOW_UP_DIRECTIVE",
+      nextAction: dueDateText,
+      riskNote: urgentText,
+    },
+    files,
+  );
+}
+
 export async function updateDirectiveLogAsSession(
   session: AppSession,
   input: UpdateDirectiveLogInput,
@@ -2032,7 +2073,7 @@ export async function updateDirectiveLogAsSession(
 
 export async function completeDirectiveAsSuperAdmin(session: AppSession, input: WorkflowDecisionInput) {
   if (!canCompleteDirectiveAsSuperAdmin(session)) {
-    throw new ApiError(403, "통합 완료를 처리할 권한이 없습니다.", null, "DIRECTIVE_COMPLETE_ALL_DENIED");
+    throw new ApiError(403, "완료 권한이 없습니다.", null, "DIRECTIVE_COMPLETE_ALL_DENIED");
   }
 
   const completionReasonError = validateCompletionRequestReason(input.reason);

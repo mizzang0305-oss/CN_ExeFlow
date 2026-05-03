@@ -14,7 +14,7 @@ export const DIRECTIVE_STATUS_LABELS: Record<DirectiveStatusValue, string> = {
   COMPLETION_REQUESTED: "승인 대기",
   DELAYED: "지연",
   IN_PROGRESS: "진행중",
-  NEW: "신규",
+  NEW: "대기",
   REJECTED: "반려",
 };
 
@@ -29,6 +29,7 @@ export type StatusFilterOption = {
 
 export const STATUS_FILTER_OPTIONS: StatusFilterOption[] = [
   { key: "ALL", label: "전체", status: null, urgent: false },
+  { key: "NEW", label: DIRECTIVE_STATUS_LABELS.NEW, status: "NEW", urgent: false },
   { key: "IN_PROGRESS", label: DIRECTIVE_STATUS_LABELS.IN_PROGRESS, status: "IN_PROGRESS", urgent: false },
   {
     key: "COMPLETION_REQUESTED",

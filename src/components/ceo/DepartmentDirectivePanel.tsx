@@ -1,8 +1,11 @@
 "use client";
 
+import { useMemo, useState } from "react";
+
 import type { DepartmentAnalysisItem } from "@/features/dashboard";
 import type { DirectiveStatusValue } from "@/lib/constants/status-labels";
 import type { DepartmentDirectivesResponse } from "@/lib/hooks/useDepartmentDirectives";
+import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,12 +31,14 @@ type DepartmentDirectivePanelProps = {
   urgent: boolean;
 };
 
+type SortOrder = "latest" | "oldest";
+
 const GLOBAL_TITLE: Record<DirectiveStatusValue, string> = {
   COMPLETED: "전체 완료 지시사항",
   COMPLETION_REQUESTED: "전체 승인 대기 지시사항",
   DELAYED: "전체 지연 지시사항",
   IN_PROGRESS: "전체 진행중 지시사항",
-  NEW: "전체 신규 지시사항",
+  NEW: "전체 대기 지시사항",
   REJECTED: "전체 반려 지시사항",
 };
 
@@ -42,7 +47,7 @@ const GLOBAL_SUBTITLE: Record<DirectiveStatusValue, string> = {
   COMPLETION_REQUESTED: "전체 승인 대기 지시사항을 표시하고 있습니다.",
   DELAYED: "전체 지연 지시사항을 표시하고 있습니다.",
   IN_PROGRESS: "전체 진행중 지시사항을 표시하고 있습니다.",
-  NEW: "전체 신규 지시사항을 표시하고 있습니다.",
+  NEW: "전체 대기 지시사항을 표시하고 있습니다.",
   REJECTED: "전체 반려 지시사항을 표시하고 있습니다.",
 };
 
@@ -51,7 +56,7 @@ const DEPARTMENT_SUBTITLE: Record<DirectiveStatusValue, string> = {
   COMPLETION_REQUESTED: "해당 부서의 승인 대기 지시사항만 표시하고 있습니다.",
   DELAYED: "해당 부서의 지연 지시사항만 표시하고 있습니다.",
   IN_PROGRESS: "해당 부서의 진행중 지시사항만 표시하고 있습니다.",
-  NEW: "해당 부서의 신규 지시사항만 표시하고 있습니다.",
+  NEW: "해당 부서의 대기 지시사항만 표시하고 있습니다.",
   REJECTED: "해당 부서의 반려 지시사항만 표시하고 있습니다.",
 };
 
@@ -97,6 +102,10 @@ function getSubtitle(mode: "global" | "department", status: DirectiveStatusValue
     : "해당 부서의 전체 지시사항을 표시하고 있습니다.";
 }
 
+function getItemTime(item: DepartmentDirectivesResponse["items"][number]) {
+  return new Date(item.updated_at ?? item.created_at).getTime();
+}
+
 export function DepartmentDirectivePanel({
   data,
   department,
@@ -112,6 +121,7 @@ export function DepartmentDirectivePanel({
   status,
   urgent,
 }: DepartmentDirectivePanelProps) {
+  const [sortOrder, setSortOrder] = useState<SortOrder>("latest");
   const departmentName = mode === "department"
     ? department?.departmentName ?? data?.department.name ?? "선택한 부서"
     : data?.department.name ?? "전체";
@@ -120,6 +130,13 @@ export function DepartmentDirectivePanel({
   const showLoadingStrip = isLoading || isRefreshing;
   const showBlockingError = Boolean(error && !data && !isLoading);
   const totalText = data ? `총 표시 ${itemCount}건` : error ? "총 표시 확인 불가" : "총 표시 확인 중";
+  const sortedItems = useMemo(() => {
+    const items = data?.items ?? [];
+    return [...items].sort((left, right) => {
+      const diff = getItemTime(right) - getItemTime(left);
+      return sortOrder === "latest" ? diff : -diff;
+    });
+  }, [data?.items, sortOrder]);
 
   return (
     <section className="detail-panel-enter flex h-full scroll-mt-4 flex-col rounded-[30px] border border-brand-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,249,255,0.94))] p-5 shadow-[0_26px_70px_rgba(6,18,38,0.18)] sm:p-6">
@@ -143,7 +160,33 @@ export function DepartmentDirectivePanel({
         <div>
           <h2 className="text-3xl font-bold text-ink-950">{title}</h2>
           <p className="mt-2 text-base font-semibold text-ink-700">{getSubtitle(mode, status, urgent)}</p>
-          <p className="mt-2 text-sm font-bold text-ink-600">{totalText}</p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-bold text-ink-600">{totalText}</p>
+            <div className="inline-flex rounded-[16px] border border-ink-200 bg-white p-1">
+              {[
+                ["latest", "최신순"],
+                ["oldest", "오래된순"],
+              ].map(([value, label]) => {
+                const active = sortOrder === value;
+
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={`${label}으로 정렬`}
+                    onClick={() => setSortOrder(value as SortOrder)}
+                    className={cn(
+                      "min-h-9 rounded-[12px] px-3 text-xs font-bold transition",
+                      active ? "bg-brand-900 text-white" : "text-ink-600 hover:bg-brand-50 hover:text-brand-900",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <StatusFilterBar currentStatus={status} currentUrgent={urgent} onChange={onFilterChange} />
@@ -190,7 +233,7 @@ export function DepartmentDirectivePanel({
           />
         ) : null}
 
-        {!showBlockingError && data && data.items.length > 0 ? <DirectiveList items={data.items} /> : null}
+        {!showBlockingError && data && data.items.length > 0 ? <DirectiveList items={sortedItems} /> : null}
       </div>
 
       {data ? (
