@@ -23,7 +23,21 @@ npm run dev
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_URL` = `https://cn-exe-flow.vercel.app`
 - `SUPABASE_SERVICE_ROLE_KEY`
+
+## Supabase Auth URL 설정
+
+Supabase Dashboard → Authentication → URL Configuration
+
+Site URL:
+https://cn-exe-flow.vercel.app
+
+Redirect URLs:
+https://cn-exe-flow.vercel.app/**
+https://cn-exe-flow.vercel.app/auth/callback
+https://cn-exe-flow.vercel.app/reset-password
+http://localhost:3000/**
 
 ## 필수 마이그레이션
 

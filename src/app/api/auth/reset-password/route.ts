@@ -18,11 +18,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const redirectTo = `${new URL(request.url).origin}/login?mode=recovery`;
-    const result = await requestPasswordReset({
-      email: parsed.data.email,
-      redirectTo,
-    });
+    const result = await requestPasswordReset({ email: parsed.data.email });
 
     return createApiSuccessResponse(result);
   } catch (error) {

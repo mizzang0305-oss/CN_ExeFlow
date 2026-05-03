@@ -160,6 +160,13 @@ export function LoginForm({ bootstrapData }: LoginFormProps) {
   }, [availableUsers, selectedDepartmentId, selectedUserId]);
 
   useEffect(() => {
+    if (searchParams.get("mode") === "reset" || searchParams.get("reset") === "1") {
+      setMode("reset");
+      setInfoMessage("회사 이메일을 입력해 재설정 메일을 다시 요청해주세요.");
+      setErrorMessage(null);
+      return;
+    }
+
     const isRecoveryMode =
       searchParams.get("mode") === "recovery" || window.location.hash.includes("access_token");
 
