@@ -329,6 +329,49 @@ test("로그인 화면은 비밀번호 저장 없이 자동 로그인 체크를 
   assert.match(authService, /rememberMe \? APP_SESSION_MAX_AGE_REMEMBER_SECONDS : APP_SESSION_MAX_AGE_DEFAULT_SECONDS/);
 });
 
+test("비밀번호 재설정 링크는 운영 도메인과 전용 재설정 화면을 사용한다", () => {
+  const resetRoute = read("src/app/api/auth/reset-password/route.ts");
+  const authService = read("src/features/auth/service.ts");
+  const callbackRoute = read("src/app/auth/callback/route.ts");
+  const resetPage = read("src/app/reset-password/page.tsx");
+  const resetClient = read("src/components/auth/reset-password-client.tsx");
+  const loginForm = read("src/components/auth/login-form.tsx");
+  const envExample = read(".env.example");
+  const readme = read("README.md");
+
+  assert.match(envExample, /NEXT_PUBLIC_APP_URL=https:\/\/cn-exe-flow\.vercel\.app/);
+  assert.match(authService, /NEXT_PUBLIC_APP_URL/);
+  assert.match(authService, /cn-exe-flow\.vercel\.app/);
+  assert.match(authService, /\/reset-password/);
+  assert.match(authService, /resetPasswordForEmail\(email,\s*{\s*redirectTo/s);
+  assert.match(resetRoute, /requestPasswordReset\(\{\s*email: parsed\.data\.email\s*}\)/s);
+  assert.doesNotMatch(resetRoute, /new URL\(request\.url\)\.origin/);
+  assert.doesNotMatch(resetRoute, /window\.location\.origin/);
+  assert.match(callbackRoute, /getPasswordResetRedirectTo/);
+  assert.match(callbackRoute, /\/reset-password/);
+  assert.match(callbackRoute, /code/);
+  assert.match(callbackRoute, /token_hash/);
+  assert.match(callbackRoute, /otp_expired/);
+  assert.match(resetPage, /ResetPasswordClient/);
+  assert.match(resetClient, /비밀번호 재설정/);
+  assert.match(resetClient, /새 비밀번호/);
+  assert.match(resetClient, /새 비밀번호 확인/);
+  assert.match(resetClient, /비밀번호를 변경했습니다/);
+  assert.match(resetClient, /다시 로그인해주세요/);
+  assert.match(resetClient, /비밀번호 재설정 링크가 만료되었습니다/);
+  assert.match(resetClient, /다시 재설정 메일을 요청해주세요/);
+  assert.match(resetClient, /재설정 메일 다시 받기/);
+  assert.match(resetClient, /otp_expired/);
+  assert.match(resetClient, /exchangeCodeForSession/);
+  assert.match(resetClient, /verifyOtp/);
+  assert.match(resetClient, /updateUser\(\{\s*password/s);
+  assert.match(loginForm, /searchParams\.get\("mode"\) === "reset"/);
+  assert.match(readme, /Supabase Dashboard → Authentication → URL Configuration/);
+  assert.match(readme, /Site URL:\s*https:\/\/cn-exe-flow\.vercel\.app/);
+  assert.match(readme, /https:\/\/cn-exe-flow\.vercel\.app\/reset-password/);
+  assert.doesNotMatch(resetClient, /This page couldn|Expired|Reset password|Retry/);
+});
+
 test("슈퍼관리자 사용자 화면 전환은 서버 세션을 바꾸지 않고 브라우저 상태만 사용한다", () => {
   const authService = read("src/features/auth/service.ts");
   const appHeader = read("src/components/app/app-header.tsx");

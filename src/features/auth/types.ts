@@ -121,5 +121,4 @@ export interface ActivateAccountResult {
 
 export interface PasswordResetRequestInput {
   email: string;
-  redirectTo: string;
 }

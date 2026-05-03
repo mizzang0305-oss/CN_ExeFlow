@@ -83,6 +83,17 @@ type SessionCookiePayload = {
   userId: string;
 };
 
+const DEFAULT_APP_URL = "https://cn-exe-flow.vercel.app";
+
+export function getAppBaseUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || DEFAULT_APP_URL;
+  return configuredUrl.replace(/\/+$/, "");
+}
+
+export function getPasswordResetRedirectTo() {
+  return `${getAppBaseUrl()}/reset-password`;
+}
+
 function buildDisplayName(user: Pick<UserRow, "name" | "profile_name">) {
   const profileName = user.profile_name?.trim();
   return profileName && profileName.length > 0 ? profileName : user.name;
@@ -761,7 +772,7 @@ export async function requestPasswordReset(input: PasswordResetRequestInput) {
 
   const client = createSupabaseAuthServerClient();
   const { error } = await client.auth.resetPasswordForEmail(email, {
-    redirectTo: input.redirectTo,
+    redirectTo: getPasswordResetRedirectTo(),
   });
 
   if (error) {
