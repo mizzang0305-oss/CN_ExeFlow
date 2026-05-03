@@ -66,10 +66,14 @@ type DepartmentRow = {
 type MeetingRecordRow = {
   content: string;
   created_at: string;
+  created_by: string | null;
+  file_name?: string | null;
+  file_url?: string | null;
   id: string;
   meeting_date: string;
   meeting_type: MeetingType;
   title: string;
+  updated_at: string | null;
   uploaded_file_url: string | null;
 };
 
@@ -89,6 +93,12 @@ type DraftOverride = {
   isSelected: boolean;
   isUrgent: boolean;
   selectedDepartmentIds: string[];
+};
+
+type UserNameRow = {
+  id: string;
+  name: string | null;
+  profile_name: string | null;
 };
 
 function assertMeetingAdmin(session: AppSession) {
@@ -232,6 +242,30 @@ async function uploadMeetingFile(file: File | null, meetingId: string) {
   return storagePath;
 }
 
+function toMeetingRecordItem(
+  meeting: MeetingRecordRow,
+  draftsByMeetingId = new Map<string, MeetingDraftItem[]>(),
+  createdByNames = new Map<string, string>(),
+): MeetingRecordItem {
+  const createdByName = meeting.created_by ? createdByNames.get(meeting.created_by) ?? null : null;
+  const fileUrl = meeting.file_url ?? meeting.uploaded_file_url;
+
+  return {
+    content: meeting.content,
+    createdAt: meeting.created_at,
+    createdByName,
+    drafts: draftsByMeetingId.get(meeting.id) ?? [],
+    fileName: meeting.file_name ?? null,
+    fileUrl,
+    id: meeting.id,
+    meetingDate: meeting.meeting_date,
+    meetingType: normalizeMeetingType(meeting.meeting_type),
+    title: meeting.title,
+    updatedAt: meeting.updated_at,
+    uploadedFileUrl: meeting.uploaded_file_url,
+  };
+}
+
 export function analyzeMeetingContent(content: string, departments: MeetingDepartmentOption[]) {
   const lines = splitMeetingContent(content);
   const candidates = lines.filter(hasDirectiveKeyword);
@@ -257,7 +291,7 @@ export async function getMeetingManagementDataAsSession(session: AppSession): Pr
   const departments = await loadActiveDepartments();
   const { data: meetings, error: meetingError } = await client
     .from("meeting_records")
-    .select("id, meeting_date, meeting_type, title, content, uploaded_file_url, created_at")
+    .select("id, meeting_date, meeting_type, title, content, uploaded_file_url, created_by, created_at, updated_at")
     .eq("is_deleted", false)
     .order("meeting_date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -269,7 +303,25 @@ export async function getMeetingManagementDataAsSession(session: AppSession): Pr
   }
 
   const meetingIds = (meetings ?? []).map((meeting) => meeting.id);
+  const createdByIds = Array.from(new Set((meetings ?? []).map((meeting) => meeting.created_by).filter(Boolean))) as string[];
   const draftsByMeetingId = new Map<string, MeetingDraftItem[]>();
+  const createdByNames = new Map<string, string>();
+
+  if (createdByIds.length > 0) {
+    const { data: users, error: userError } = await client
+      .from("users")
+      .select("id, name, profile_name")
+      .in("id", createdByIds)
+      .returns<UserNameRow[]>();
+
+    if (userError) {
+      throw new ApiError(500, "회의 등록자 정보를 불러오지 못했습니다.", userError, "MEETING_USERS_LOAD_FAILED");
+    }
+
+    for (const user of users ?? []) {
+      createdByNames.set(user.id, user.profile_name?.trim() || user.name || "등록자 미확인");
+    }
+  }
 
   if (meetingIds.length > 0) {
     const { data: drafts, error: draftError } = await client
@@ -292,16 +344,9 @@ export async function getMeetingManagementDataAsSession(session: AppSession): Pr
 
   return {
     departments,
-    meetings: (meetings ?? []).map<MeetingRecordItem>((meeting) => ({
-      content: meeting.content,
-      createdAt: meeting.created_at,
-      drafts: draftsByMeetingId.get(meeting.id) ?? [],
-      id: meeting.id,
-      meetingDate: meeting.meeting_date,
-      meetingType: normalizeMeetingType(meeting.meeting_type),
-      title: meeting.title,
-      uploadedFileUrl: meeting.uploaded_file_url,
-    })),
+    meetings: (meetings ?? []).map<MeetingRecordItem>((meeting) =>
+      toMeetingRecordItem(meeting, draftsByMeetingId, createdByNames),
+    ),
   };
 }
 
@@ -338,7 +383,7 @@ export async function createMeetingRecordAsSession(
       title,
       uploaded_file_url: uploadedFileUrl,
     })
-    .select("id, meeting_date, meeting_type, title, content, uploaded_file_url, created_at")
+    .select("id, meeting_date, meeting_type, title, content, uploaded_file_url, created_by, created_at, updated_at")
     .single<MeetingRecordRow>();
 
   if (error) {
@@ -349,6 +394,97 @@ export async function createMeetingRecordAsSession(
     action: "MEETING_RECORD_CREATED",
     actorId: session.userId,
     afterData: data,
+    entityId: data.id,
+    entityType: "meeting_record",
+  });
+
+  return data;
+}
+
+export async function updateMeetingRecordAsSession(
+  session: AppSession,
+  meetingId: string,
+  input: {
+    content: string;
+    meetingDate: string;
+    meetingType: MeetingType;
+    title: string;
+  },
+  file: File | null,
+) {
+  assertMeetingAdmin(session);
+
+  const title = input.title.trim();
+  const content = input.content.trim();
+
+  if (title.length < 2 || content.length < 5) {
+    throw new ApiError(400, "회의 제목과 내용을 입력해주세요.", null, "MEETING_RECORD_INVALID");
+  }
+
+  const client = createSupabaseServerClient();
+  const uploadedFileUrl = await uploadMeetingFile(file, meetingId);
+  const updatePayload: Record<string, string | null> = {
+    content,
+    meeting_date: input.meetingDate,
+    meeting_type: input.meetingType,
+    title,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (uploadedFileUrl) {
+    updatePayload.uploaded_file_url = uploadedFileUrl;
+  }
+
+  const { data, error } = await client
+    .from("meeting_records")
+    .update(updatePayload)
+    .eq("id", meetingId)
+    .eq("is_deleted", false)
+    .select("id, meeting_date, meeting_type, title, content, uploaded_file_url, created_by, created_at, updated_at")
+    .single<MeetingRecordRow>();
+
+  if (error) {
+    throw new ApiError(500, "회의를 수정하지 못했습니다.", error, "MEETING_RECORD_UPDATE_FAILED");
+  }
+
+  await recordHistory(client, {
+    action: "MEETING_RECORD_UPDATED",
+    actorId: session.userId,
+    afterData: data,
+    entityId: data.id,
+    entityType: "meeting_record",
+  });
+
+  return data;
+}
+
+export async function softDeleteMeetingRecordAsSession(session: AppSession, meetingId: string) {
+  assertMeetingAdmin(session);
+
+  const client = createSupabaseServerClient();
+  const { data, error } = await client
+    .from("meeting_records")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: session.userId,
+      is_deleted: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", meetingId)
+    .eq("is_deleted", false)
+    .select("id, meeting_date, meeting_type, title, content, uploaded_file_url, created_by, created_at, updated_at")
+    .single<MeetingRecordRow>();
+
+  if (error) {
+    throw new ApiError(500, "회의를 목록에서 숨기지 못했습니다.", error, "MEETING_RECORD_DELETE_FAILED");
+  }
+
+  await recordHistory(client, {
+    action: "MEETING_RECORD_SOFT_DELETED",
+    actorId: session.userId,
+    afterData: {
+      is_deleted: true,
+    },
     entityId: data.id,
     entityType: "meeting_record",
   });

@@ -19,11 +19,15 @@ export type MeetingDraftItem = {
 export type MeetingRecordItem = {
   content: string;
   createdAt: string;
+  createdByName: string | null;
   drafts: MeetingDraftItem[];
+  fileName: string | null;
+  fileUrl: string | null;
   id: string;
   meetingDate: string;
   meetingType: MeetingType;
   title: string;
+  updatedAt: string | null;
   uploadedFileUrl: string | null;
 };
 

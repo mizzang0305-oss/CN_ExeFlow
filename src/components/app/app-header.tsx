@@ -7,7 +7,11 @@ import { getDefaultAppRoute, isAdminRole, roleLabelMap } from "@/features/auth/u
 
 import { StatusPill } from "@/components/ui/status-pill";
 
-import { ImpersonationSwitcher, useStoredImpersonationState } from "./impersonation-switcher";
+import {
+  ENABLE_IMPERSONATION_SWITCHER,
+  ImpersonationSwitcher,
+  useStoredImpersonationState,
+} from "./impersonation-switcher";
 import { LogoutButton } from "./logout-button";
 import { NotificationInboxLink } from "./notification-inbox-link";
 import { type NavigationItem, TopNav } from "./top-nav";
@@ -28,7 +32,7 @@ export function AppHeader({
   title,
 }: AppHeaderProps) {
   const impersonation = useStoredImpersonationState();
-  const isImpersonationActive = impersonation.active && isAdminRole(session.role);
+  const isImpersonationActive = ENABLE_IMPERSONATION_SWITCHER && impersonation.active && isAdminRole(session.role);
   const effectiveDisplayName = isImpersonationActive && impersonation.userName
     ? impersonation.userName
     : session.displayName;

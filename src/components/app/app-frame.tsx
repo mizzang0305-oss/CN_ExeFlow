@@ -2,6 +2,7 @@ import type { AppSession } from "@/features/auth/types";
 import { canAccessApprovalQueue, isAdminRole } from "@/features/auth/utils";
 
 import { AppHeader } from "./app-header";
+import { PwaInstallPrompt } from "./pwa-install-prompt";
 import { RoleRouteGuard } from "./role-route-guard";
 import { SessionTelemetryBridge } from "./session-telemetry-bridge";
 import type { NavigationItem } from "./top-nav";
@@ -17,10 +18,10 @@ type AppFrameProps = {
 
 function getNavigationItems(session: AppSession): NavigationItem[] {
   if (isAdminRole(session.role)) {
-    return [
+    const adminItems: NavigationItem[] = [
       { href: "/dashboard/ceo", label: "대표 대시보드" },
       { href: "/directives", label: "지시 관리" },
-      { href: "/meetings", label: "회의록 관리" },
+      { href: "/meetings", label: "회의실 입장" },
       { href: "/directives/approval-queue", label: "승인 대기" },
       { href: "/reports", label: "주간 보고" },
       { href: "/admin/auth-logs", label: "접속 로그" },
@@ -28,6 +29,12 @@ function getNavigationItems(session: AppSession): NavigationItem[] {
       { href: "/admin/notification-logs", label: "알림 로그" },
       { href: "/admin/master/departments", label: "조직 설정" },
     ];
+
+    if (session.role === "SUPER_ADMIN") {
+      adminItems.push({ href: "/developer", label: "개발자 도구" });
+    }
+
+    return adminItems;
   }
 
   if (session.role === "DEPARTMENT_HEAD") {
@@ -84,6 +91,7 @@ export function AppFrame({
       />
 
       <SessionTelemetryBridge />
+      <PwaInstallPrompt />
 
       <main className="app-container relative z-10 py-6 sm:py-8">{children}</main>
     </div>
