@@ -12,6 +12,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 import {
   BULK_DIRECTIVE_ALLOWED_DEPARTMENTS,
   BULK_DIRECTIVE_REQUIRED_COLUMNS,
+  BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS,
   BULK_DIRECTIVE_STATUS_LABEL_TO_VALUE,
   BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL,
 } from "./constants";
@@ -22,6 +23,7 @@ import type {
   BulkDirectiveNormalizedData,
   BulkDirectivePreviewResponse,
   BulkDirectivePreviewRow,
+  BulkDirectiveReplaceRegisterResult,
   BulkDirectiveArchiveResult,
   BulkDirectiveRegisterResult,
   BulkImportBatchRow,
@@ -39,7 +41,12 @@ type ZipEntry = {
 };
 
 const DIRECTIVE_BATCH_TYPE = "DIRECTIVE";
+const DIRECTIVE_REPLACE_BATCH_TYPE = "DIRECTIVE_REPLACE";
+const DIRECTIVE_REPLACE_SHEET_NAME = "통합 지시사항";
+const DIRECTIVE_REPLACE_CONFIRM_TEXT = "전체교체";
+const DIRECTIVE_REPLACE_ARCHIVE_REASON = "엑셀 재등록 전 기존 지시사항 전체 비노출";
 const MAX_DIRECTIVE_NO_RETRIES = 8;
+const REPLACE_DEFAULT_DATE = "2026-04-24";
 const OPERATING_DEPARTMENT_CODES = new Set([
   "ALL",
   "MANAGEMENT_CENTER",
@@ -50,14 +57,41 @@ const OPERATING_DEPARTMENT_CODES = new Set([
 
 const DEPARTMENT_ALIASES = new Map<string, string>([
   ["전 부서", "전체"],
+  ["전부서", "전체"],
   ["전체", "전체"],
+  ["주식회사 씨엔푸드", "전체"],
   ["경영관리부", "경영관리센터"],
   ["경영관리센터", "경영관리센터"],
+  ["경영지원센터", "경영관리센터"],
+  ["세무회계팀", "경영관리센터"],
+  ["자금팀", "경영관리센터"],
+  ["인사총무팀", "경영관리센터"],
+  ["시설관리팀", "경영관리센터"],
+  ["채권관리팀", "경영관리센터"],
+  ["운영점검 테스트부서", "경영관리센터"],
+  ["기획영업부", "영업본부"],
   ["영업본부", "영업본부"],
-  ["물류부", "구매물류부"],
+  ["기획영업1팀", "영업본부"],
+  ["기획영업2팀", "영업본부"],
+  ["기획전략팀", "영업본부"],
+  ["영업1팀", "영업본부"],
+  ["영업2팀", "영업본부"],
+  ["영업3팀", "영업본부"],
+  ["신규개발팀", "영업본부"],
   ["구매물류부", "구매물류부"],
-  ["공장총괄", "공장총괄본부"],
+  ["물류부", "구매물류부"],
+  ["물류팀", "구매물류부"],
+  ["물류경리팀", "구매물류부"],
   ["공장총괄본부", "공장총괄본부"],
+  ["공장총괄", "공장총괄본부"],
+  ["생산부", "공장총괄본부"],
+  ["육가공", "공장총괄본부"],
+  ["육가공팀", "공장총괄본부"],
+  ["육가공물류", "공장총괄본부"],
+  ["HACCP", "공장총괄본부"],
+  ["햅썹운용팀", "공장총괄본부"],
+  ["인식당", "공장총괄본부"],
+  ["R&D", "공장총괄본부"],
 ]);
 
 const URGENT_TRUE_VALUES = new Set(["1", "Y", "YES", "TRUE", "긴급", "예", "유", "O", "○"]);
@@ -87,6 +121,13 @@ function toDateValue(value: string, fallback?: string) {
     const excelEpoch = Date.UTC(1899, 11, 30);
     const date = new Date(excelEpoch + Number(trimmed) * 24 * 60 * 60 * 1000);
     return date.toISOString().slice(0, 10);
+  }
+
+  const monthDayMatch = trimmed.match(/^(\d{1,2})[./](\d{1,2})$/);
+
+  if (monthDayMatch) {
+    const [, month, day] = monthDayMatch;
+    return `2026-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
   const normalized = trimmed.replace(/[./]/g, "-");
@@ -159,6 +200,17 @@ function decodeXml(value: string) {
 
 function stripXmlTags(value: string) {
   return decodeXml(value.replace(/<[^>]+>/g, ""));
+}
+
+function parseXmlAttributes(value: string) {
+  const attributes = new Map<string, string>();
+  const matches = value.matchAll(/([\w:]+)="([^"]*)"/g);
+
+  for (const match of matches) {
+    attributes.set(match[1], decodeXml(match[2]));
+  }
+
+  return attributes;
 }
 
 function parseZipEntries(buffer: Buffer) {
@@ -285,12 +337,51 @@ function parseWorksheetRows(xml: string, sharedStrings: string[]) {
   return rows;
 }
 
-function parseXlsxBuffer(buffer: Buffer): ParsedSpreadsheetRow[] {
+function findWorksheetEntry(entries: Map<string, ZipEntry>, sheetName?: string) {
+  if (!sheetName) {
+    return (
+      entries.get("xl/worksheets/sheet1.xml") ??
+      [...entries.values()].find((entry) => entry.name.startsWith("xl/worksheets/sheet"))
+    );
+  }
+
+  const workbookXml = entries.get("xl/workbook.xml")?.data.toString("utf8");
+  const relationXml = entries.get("xl/_rels/workbook.xml.rels")?.data.toString("utf8");
+
+  if (!workbookXml || !relationXml) {
+    throw new ApiError(400, "엑셀 통합 문서 정보를 읽을 수 없습니다.", null, "BULK_XLSX_WORKBOOK_NOT_FOUND");
+  }
+
+  const sheetMatch = [...workbookXml.matchAll(/<sheet\b([^>]*)\/?>/g)].find((match) => {
+    const attributes = parseXmlAttributes(match[1]);
+    return attributes.get("name") === sheetName;
+  });
+
+  if (!sheetMatch) {
+    throw new ApiError(400, `${sheetName} 시트를 찾을 수 없습니다.`, null, "BULK_XLSX_TARGET_SHEET_NOT_FOUND");
+  }
+
+  const sheetAttributes = parseXmlAttributes(sheetMatch[1]);
+  const relationId = sheetAttributes.get("r:id");
+  const relationMatch = [...relationXml.matchAll(/<Relationship\b([^>]*)\/?>/g)].find((match) => {
+    const attributes = parseXmlAttributes(match[1]);
+    return attributes.get("Id") === relationId;
+  });
+
+  if (!relationMatch) {
+    throw new ApiError(400, `${sheetName} 시트 위치를 확인할 수 없습니다.`, null, "BULK_XLSX_TARGET_SHEET_REL_NOT_FOUND");
+  }
+
+  const target = parseXmlAttributes(relationMatch[1]).get("Target") ?? "";
+  const targetPath = target.startsWith("/") ? target.slice(1) : `xl/${target.replace(/^\.\.\//, "")}`;
+
+  return entries.get(targetPath);
+}
+
+function parseXlsxBuffer(buffer: Buffer, options?: { sheetName?: string }): ParsedSpreadsheetRow[] {
   const entries = parseZipEntries(buffer);
   const sharedStrings = parseSharedStrings(entries.get("xl/sharedStrings.xml")?.data.toString("utf8"));
-  const sheetEntry =
-    entries.get("xl/worksheets/sheet1.xml") ??
-    [...entries.values()].find((entry) => entry.name.startsWith("xl/worksheets/sheet"));
+  const sheetEntry = findWorksheetEntry(entries, options?.sheetName);
 
   if (!sheetEntry) {
     throw new ApiError(400, "등록양식 시트를 찾을 수 없습니다.", null, "BULK_XLSX_SHEET_NOT_FOUND");
@@ -381,7 +472,7 @@ function parseCsvText(text: string): ParsedSpreadsheetRow[] {
     .filter((row) => Object.values(row.values).some((value) => value?.trim()));
 }
 
-async function parseSpreadsheetFile(file: File) {
+async function parseSpreadsheetFile(file: File, options?: { sheetName?: string }) {
   const fileName = file.name.toLowerCase();
   const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -390,7 +481,7 @@ async function parseSpreadsheetFile(file: File) {
   }
 
   if (fileName.endsWith(".xlsx") || file.type.includes("spreadsheetml")) {
-    return parseXlsxBuffer(buffer);
+    return parseXlsxBuffer(buffer, options);
   }
 
   throw new ApiError(400, "엑셀 또는 CSV 파일만 업로드할 수 있습니다.", null, "BULK_FILE_TYPE_INVALID");
@@ -434,7 +525,7 @@ function normalizeDepartmentLabel(value: string) {
 function resolveDepartments(rawValue: string, departments: BulkDirectiveDepartment[]) {
   const errors: string[] = [];
   const labels = rawValue
-    .split(/[,，;、\n]/)
+    .split(/\s*(?:,|\/|\\|\||ㆍ|·|，|、|;|；|\n|\r|\+|&)\s*/)
     .map(normalizeDepartmentLabel)
     .filter(Boolean);
 
@@ -592,6 +683,118 @@ function validateAndNormalizeRow(
   };
 }
 
+function buildPlannedDirectiveNumber(meetingDate: string, sequenceByYearMonth: Map<string, number>) {
+  const yearMonth = meetingDate.slice(0, 7);
+  const sequence = (sequenceByYearMonth.get(yearMonth) ?? 0) + 1;
+
+  sequenceByYearMonth.set(yearMonth, sequence);
+
+  return {
+    directiveNo: `CN-${yearMonth}-${String(sequence).padStart(3, "0")}`,
+    sequence,
+    yearMonth,
+  };
+}
+
+function validateAndNormalizeReplaceRow(
+  parsedRow: ParsedSpreadsheetRow,
+  departments: BulkDirectiveDepartment[],
+  sequenceByYearMonth: Map<string, number>,
+): Omit<BulkDirectivePreviewRow, "batchRowId"> & { normalizedData: BulkDirectiveNormalizedData | null; rawData: Record<string, string | null> } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const rawData = parsedRow.values;
+
+  for (const column of BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS) {
+    if (!(column in rawData)) {
+      errors.push(`필수 컬럼이 없습니다: ${column}`);
+    }
+  }
+
+  const directiveText = getCellValue(rawData, "지시사항");
+  const rawDepartments = getCellValue(rawData, "담당부서");
+  const rawMeetingDate = getCellValue(rawData, "회의일");
+  const rawDueDate = getCellValue(rawData, "기한");
+  const meetingDate = toDateValue(rawMeetingDate, REPLACE_DEFAULT_DATE) ?? REPLACE_DEFAULT_DATE;
+  const dueDate = toDateValue(rawDueDate);
+  const statusResult = normalizeStatus(getCellValue(rawData, "상태"));
+  const departmentResult = resolveDepartments(rawDepartments, departments);
+  const chairRole = getCellValue(rawData, "주관") || null;
+  const sourceNo = getCellValue(rawData, "No.") || null;
+  const planned = buildPlannedDirectiveNumber(meetingDate, sequenceByYearMonth);
+
+  errors.push(...statusResult.errors, ...departmentResult.errors);
+
+  if (!directiveText) {
+    errors.push("지시사항을 입력해주세요.");
+  }
+
+  if (!rawDepartments) {
+    errors.push("담당부서를 입력해주세요.");
+  }
+
+  if (!rawMeetingDate) {
+    warnings.push("회의일이 비어 있어 파일 기준일로 처리됩니다.");
+  } else if (!toDateValue(rawMeetingDate)) {
+    errors.push("회의일 형식을 확인해주세요.");
+  }
+
+  if (rawDueDate && !dueDate) {
+    errors.push("기한 형식을 확인해주세요.");
+  }
+
+  const title = normalizeTitle(directiveText || "지시사항 입력 필요");
+  const contentParts = [
+    directiveText,
+    chairRole ? `주관: ${chairRole}` : null,
+    sourceNo ? `엑셀 No.: ${sourceNo}` : null,
+  ].filter(Boolean);
+  const normalizedData: BulkDirectiveNormalizedData | null =
+    errors.length === 0
+      ? {
+          chairRole,
+          content: contentParts.join("\n"),
+          departmentIds: departmentResult.departmentIds,
+          departments: departmentResult.departmentNames,
+          directiveNo: planned.directiveNo,
+          dueDate,
+          isUrgent: false,
+          meetingDate,
+          note: null,
+          sequence: planned.sequence,
+          sourceNo,
+          status: statusResult.status,
+          statusLabel: BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL[statusResult.status],
+          targetScope: departmentResult.departmentNames.includes("전체") ? "ALL" : "SELECTED",
+          title,
+          urgentLevel: null,
+          warnings,
+          yearMonth: planned.yearMonth,
+        }
+      : null;
+
+  return {
+    rawData,
+    normalizedData,
+    chairRole,
+    content: normalizedData?.content ?? directiveText,
+    departments: departmentResult.departmentNames.length > 0 ? departmentResult.departmentNames : rawDepartments ? [rawDepartments] : [],
+    directiveNo: planned.directiveNo,
+    dueDate,
+    errors,
+    isUrgent: false,
+    meetingDate,
+    note: null,
+    rowNumber: parsedRow.rowNumber,
+    status: statusResult.status,
+    statusLabel: BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL[statusResult.status],
+    title,
+    urgentLevel: null,
+    valid: errors.length === 0,
+    warnings,
+  };
+}
+
 function isOperatingDepartment(department: BulkDirectiveDepartment) {
   if (department.code && OPERATING_DEPARTMENT_CODES.has(department.code)) {
     return true;
@@ -627,7 +830,13 @@ async function loadBulkDepartments(client: SupabaseClient): Promise<BulkDirectiv
   return operatingDepartments.length > 0 ? operatingDepartments : departments;
 }
 
-function toStoredRow(row: ReturnType<typeof validateAndNormalizeRow>) {
+function toStoredRow(row: {
+  errors: string[];
+  normalizedData: BulkDirectiveNormalizedData | null;
+  rawData: Record<string, string | null>;
+  rowNumber: number;
+  valid: boolean;
+}) {
   return {
     errors: row.errors,
     normalized_data: row.normalizedData,
@@ -645,6 +854,7 @@ function toPreviewRow(row: BulkImportRowRow): BulkDirectivePreviewRow {
     chairRole: normalized?.chairRole ?? null,
     content: normalized?.content ?? "",
     departments: normalized?.departments ?? [],
+    directiveNo: normalized?.directiveNo ?? null,
     dueDate: normalized?.dueDate ?? null,
     errors: Array.isArray(row.errors) ? row.errors : [],
     isUrgent: normalized?.isUrgent ?? false,
@@ -656,6 +866,7 @@ function toPreviewRow(row: BulkImportRowRow): BulkDirectivePreviewRow {
     title: normalized?.title ?? "",
     urgentLevel: normalized?.urgentLevel ?? null,
     valid: row.valid,
+    warnings: normalized?.warnings ?? [],
   };
 }
 
@@ -667,8 +878,10 @@ export async function getBulkDirectiveManagementDataAsSession(
   const client = createSupabaseServerClient();
   const { data: batches, error } = await client
     .from("bulk_import_batches")
-    .select("id, type, file_name, status, total_rows, valid_rows, invalid_rows, created_by, created_at, registered_at")
-    .eq("type", DIRECTIVE_BATCH_TYPE)
+    .select(
+      "id, type, file_name, status, total_rows, valid_rows, invalid_rows, created_by, created_at, registered_at, archived_directives_count, archive_reason, replace_mode",
+    )
+    .in("type", [DIRECTIVE_BATCH_TYPE, DIRECTIVE_REPLACE_BATCH_TYPE])
     .order("created_at", { ascending: false })
     .limit(30);
 
@@ -721,6 +934,8 @@ export async function getBulkDirectiveManagementDataAsSession(
       fileName: batch.file_name,
       id: batch.id,
       invalidRows: batch.invalid_rows,
+      archivedDirectivesCount: batch.archived_directives_count ?? 0,
+      archiveReason: batch.archive_reason ?? null,
       registeredAt: batch.registered_at,
       registeredCount: registeredCountByBatch.get(batch.id) ?? 0,
       status: batch.status,
@@ -803,6 +1018,107 @@ export async function previewBulkDirectivesAsSession(
   return {
     batchId,
     invalidRows,
+    rows: ((storedRows ?? []) as BulkImportRowRow[]).map(toPreviewRow),
+    totalRows: previewRows.length,
+    validRows,
+  };
+}
+
+async function countActiveDirectives(client: SupabaseClient) {
+  const { count, error } = await client
+    .from("directives")
+    .select("id", { count: "exact", head: true })
+    .eq("is_archived", false);
+
+  if (error) {
+    throw new ApiError(500, "기존 활성 지시사항 수를 확인하지 못했습니다.", error, "BULK_REPLACE_ACTIVE_COUNT_FAILED");
+  }
+
+  return count ?? 0;
+}
+
+export async function previewReplaceDirectivesAsSession(
+  session: AppSession,
+  file: File | null,
+): Promise<BulkDirectivePreviewResponse> {
+  assertBulkAdmin(session);
+
+  if (!file || file.size === 0) {
+    throw new ApiError(400, "업로드할 엑셀 파일을 선택해주세요.", null, "BULK_REPLACE_FILE_REQUIRED");
+  }
+
+  const client = createSupabaseServerClient();
+  const departments = await loadBulkDepartments(client);
+  const parsedRows = await parseSpreadsheetFile(file, { sheetName: DIRECTIVE_REPLACE_SHEET_NAME });
+  const sequenceByYearMonth = new Map<string, number>();
+  const previewRows = parsedRows.map((row) => validateAndNormalizeReplaceRow(row, departments, sequenceByYearMonth));
+  const validRows = previewRows.filter((row) => row.valid).length;
+  const invalidRows = previewRows.length - validRows;
+  const activeDirectivesCount = await countActiveDirectives(client);
+  const batchId = crypto.randomUUID();
+
+  const { error: batchError } = await client.from("bulk_import_batches").insert({
+    archive_reason: DIRECTIVE_REPLACE_ARCHIVE_REASON,
+    archived_directives_count: 0,
+    created_by: session.userId,
+    file_name: file.name || "업로드 파일",
+    id: batchId,
+    invalid_rows: invalidRows,
+    replace_mode: true,
+    status: "PREVIEW",
+    total_rows: previewRows.length,
+    type: DIRECTIVE_REPLACE_BATCH_TYPE,
+    valid_rows: validRows,
+  });
+
+  if (batchError) {
+    throw new ApiError(500, "전체 교체 검증 내역을 저장하지 못했습니다.", batchError, "BULK_REPLACE_BATCH_CREATE_FAILED");
+  }
+
+  if (previewRows.length > 0) {
+    const { error: rowError } = await client.from("bulk_import_rows").insert(
+      previewRows.map((row) => ({
+        ...toStoredRow(row),
+        batch_id: batchId,
+        id: crypto.randomUUID(),
+      })),
+    );
+
+    if (rowError) {
+      throw new ApiError(500, "전체 교체 검증 행을 저장하지 못했습니다.", rowError, "BULK_REPLACE_ROWS_CREATE_FAILED");
+    }
+  }
+
+  const { data: storedRows, error: loadError } = await client
+    .from("bulk_import_rows")
+    .select("id, batch_id, row_number, raw_data, normalized_data, valid, errors, directive_id, created_at")
+    .eq("batch_id", batchId)
+    .order("row_number", { ascending: true });
+
+  if (loadError) {
+    throw new ApiError(500, "전체 교체 미리보기 행을 불러오지 못했습니다.", loadError, "BULK_REPLACE_PREVIEW_LOAD_FAILED");
+  }
+
+  await recordHistory(client, {
+    action: "BULK_DIRECTIVE_REPLACE_PREVIEW_CREATED",
+    actorId: session.userId,
+    entityId: batchId,
+    entityType: "bulk_import_batch",
+    metadata: {
+      activeDirectivesCount,
+      fileName: file.name,
+      invalidRows,
+      sheetName: DIRECTIVE_REPLACE_SHEET_NAME,
+      totalRows: previewRows.length,
+      validRows,
+    },
+  });
+
+  return {
+    activeDirectivesCount,
+    batchId,
+    invalidRows,
+    replaceMode: true,
     rows: ((storedRows ?? []) as BulkImportRowRow[]).map(toPreviewRow),
     totalRows: previewRows.length,
     validRows,
@@ -911,6 +1227,193 @@ async function createBulkDirective(
   throw new ApiError(409, "관리번호가 중복되어 등록하지 못했습니다. 다시 시도해주세요.", null, "BULK_DIRECTIVE_NO_CONFLICT");
 }
 
+function findAllDepartmentId(departments: BulkDirectiveDepartment[]) {
+  return departments.find((department) => department.code === "ALL")?.id ?? departments.find((department) => department.name === "전체")?.id ?? null;
+}
+
+function buildReplaceTargetDepartmentIds(normalized: BulkDirectiveNormalizedData, departments: BulkDirectiveDepartment[]) {
+  const activeDepartmentIds = new Set(departments.map((department) => department.id));
+  const allDepartmentId = findAllDepartmentId(departments);
+  const selectedIds = [...new Set(normalized.departmentIds)].filter((departmentId) => activeDepartmentIds.has(departmentId));
+  const targetDepartmentIds = allDepartmentId ? [allDepartmentId, ...selectedIds.filter((departmentId) => departmentId !== allDepartmentId)] : selectedIds;
+
+  return [...new Set(targetDepartmentIds)];
+}
+
+async function archiveActiveDirectivesForReplace(
+  client: SupabaseClient,
+  session: AppSession,
+  archivedAt: string,
+  archiveSuffix: string,
+) {
+  const { data: directives, error } = await client
+    .from("directives")
+    .select("id, directive_no")
+    .eq("is_archived", false);
+
+  if (error) {
+    throw new ApiError(500, "기존 지시사항을 불러오지 못했습니다.", error, "BULK_REPLACE_ACTIVE_LOAD_FAILED");
+  }
+
+  const activeDirectives = (directives ?? []) as Array<{ directive_no: string; id: string }>;
+
+  for (const directive of activeDirectives) {
+    const { error: updateError } = await client
+      .from("directives")
+      .update({
+        archive_reason: DIRECTIVE_REPLACE_ARCHIVE_REASON,
+        archived_at: archivedAt,
+        archived_by: session.userId,
+        directive_no: `OLD-${directive.directive_no}-${archiveSuffix}`,
+        is_archived: true,
+        updated_at: archivedAt,
+      })
+      .eq("id", directive.id)
+      .eq("is_archived", false);
+
+    if (updateError) {
+      throw new ApiError(500, "기존 지시사항을 비노출 처리하지 못했습니다.", updateError, "BULK_REPLACE_ARCHIVE_FAILED");
+    }
+  }
+
+  return activeDirectives.length;
+}
+
+async function releaseDirectiveNumberConflicts(
+  client: SupabaseClient,
+  session: AppSession,
+  plannedDirectiveNos: string[],
+  archivedAt: string,
+  archiveSuffix: string,
+) {
+  const uniqueNos = [...new Set(plannedDirectiveNos.filter(Boolean))];
+
+  if (uniqueNos.length === 0) {
+    return;
+  }
+
+  const { data: conflicts, error } = await client
+    .from("directives")
+    .select("id, directive_no")
+    .in("directive_no", uniqueNos);
+
+  if (error) {
+    throw new ApiError(500, "관리번호 중복 여부를 확인하지 못했습니다.", error, "BULK_REPLACE_NO_CONFLICT_LOAD_FAILED");
+  }
+
+  for (const directive of (conflicts ?? []) as Array<{ directive_no: string; id: string }>) {
+    const { error: updateError } = await client
+      .from("directives")
+      .update({
+        archive_reason: DIRECTIVE_REPLACE_ARCHIVE_REASON,
+        archived_at: archivedAt,
+        archived_by: session.userId,
+        directive_no: `OLD-${directive.directive_no}-${archiveSuffix}-${directive.id.slice(0, 8)}`,
+        is_archived: true,
+        updated_at: archivedAt,
+      })
+      .eq("id", directive.id);
+
+    if (updateError) {
+      throw new ApiError(500, "기존 관리번호 충돌을 정리하지 못했습니다.", updateError, "BULK_REPLACE_NO_CONFLICT_UPDATE_FAILED");
+    }
+  }
+}
+
+async function createReplaceDirective(
+  client: SupabaseClient,
+  session: AppSession,
+  row: BulkImportRowRow,
+  departments: BulkDirectiveDepartment[],
+) {
+  const normalized = row.normalized_data;
+
+  if (!normalized?.directiveNo || !normalized.sequence || !normalized.yearMonth) {
+    throw new ApiError(400, "정상 검증된 교체 행만 등록할 수 있습니다.", null, "BULK_REPLACE_ROW_INVALID");
+  }
+
+  const targetDepartmentIds = buildReplaceTargetDepartmentIds(normalized, departments);
+
+  if (targetDepartmentIds.length === 0) {
+    throw new ApiError(400, "등록할 담당부서를 찾을 수 없습니다.", null, "BULK_REPLACE_ROW_DEPARTMENT_MISSING");
+  }
+
+  const departmentMap = new Map(departments.map((department) => [department.id, department]));
+  const allDepartmentId = findAllDepartmentId(departments);
+  const createdAt = buildCreatedAt(normalized.meetingDate);
+  const now = new Date().toISOString();
+  const ownerDepartmentId =
+    targetDepartmentIds.find((departmentId) => departmentId !== allDepartmentId) ?? targetDepartmentIds[0];
+  const directiveId = crypto.randomUUID();
+  const insertDirective = await client
+    .from("directives")
+    .insert({
+      content: normalized.content,
+      created_at: createdAt,
+      created_by: session.userId,
+      directive_no: normalized.directiveNo,
+      due_date: normalized.dueDate,
+      id: directiveId,
+      is_archived: false,
+      is_urgent: false,
+      owner_department_id: ownerDepartmentId,
+      owner_user_id: null,
+      sequence: normalized.sequence,
+      status: normalized.status,
+      target_scope: normalized.targetScope ?? "SELECTED",
+      title: normalized.title,
+      updated_at: now,
+      urgent_level: null,
+      year_month: normalized.yearMonth,
+    })
+    .select("id, directive_no, title, status")
+    .single<{ directive_no: string; id: string; status: DirectiveStatus; title: string }>();
+
+  if (insertDirective.error) {
+    throw new ApiError(500, "엑셀 지시사항을 등록하지 못했습니다.", insertDirective.error, "BULK_REPLACE_DIRECTIVE_CREATE_FAILED");
+  }
+
+  const assignmentRows = targetDepartmentIds.map((departmentId) => {
+    const department = departmentMap.get(departmentId);
+    const isOwner = departmentId === ownerDepartmentId;
+
+    return {
+      assigned_at: createdAt,
+      assignment_role: isOwner ? "OWNER" : departmentId === allDepartmentId ? "REFERENCE" : "SUPPORT",
+      created_at: createdAt,
+      department_closed_at: normalized.status === "COMPLETED" ? now : null,
+      department_due_date: normalized.dueDate,
+      department_head_id: department?.headUserId ?? null,
+      department_id: departmentId,
+      department_status: normalized.status,
+      directive_id: insertDirective.data.id,
+      id: crypto.randomUUID(),
+      is_primary: isOwner,
+      updated_at: now,
+    };
+  });
+  const insertAssignments = await client.from("directive_departments").insert(assignmentRows);
+
+  if (insertAssignments.error) {
+    throw new ApiError(500, "엑셀 담당부서 배정을 등록하지 못했습니다.", insertAssignments.error, "BULK_REPLACE_ASSIGNMENTS_CREATE_FAILED");
+  }
+
+  await recordHistory(client, {
+    action: "BULK_REPLACE_DIRECTIVE_CREATED",
+    actorId: session.userId,
+    afterData: insertDirective.data,
+    entityId: insertDirective.data.id,
+    entityType: "directive",
+    metadata: {
+      batchId: row.batch_id,
+      rowId: row.id,
+      rowNumber: row.row_number,
+    },
+  });
+
+  return insertDirective.data;
+}
+
 export async function registerBulkDirectivesAsSession(
   session: AppSession,
   input: { batchId: string; selectedRowIds: string[] },
@@ -1006,6 +1509,118 @@ export async function registerBulkDirectivesAsSession(
   return {
     createdDirectiveIds,
     message: "선택한 지시사항을 등록했습니다.",
+    registeredCount: createdDirectiveIds.length,
+  };
+}
+
+export async function registerReplaceDirectivesAsSession(
+  session: AppSession,
+  input: { batchId: string; confirmText: string },
+): Promise<BulkDirectiveReplaceRegisterResult> {
+  assertBulkAdmin(session);
+
+  if (input.confirmText !== DIRECTIVE_REPLACE_CONFIRM_TEXT) {
+    throw new ApiError(400, "확인 문구로 전체교체를 입력해주세요.", null, "BULK_REPLACE_CONFIRM_TEXT_INVALID");
+  }
+
+  const client = createSupabaseServerClient();
+  const { data: batch, error: batchError } = await client
+    .from("bulk_import_batches")
+    .select("id, status, invalid_rows")
+    .eq("id", input.batchId)
+    .eq("type", DIRECTIVE_REPLACE_BATCH_TYPE)
+    .maybeSingle<{ id: string; invalid_rows: number; status: string }>();
+
+  if (batchError) {
+    throw new ApiError(500, "전체 교체 내역을 확인하지 못했습니다.", batchError, "BULK_REPLACE_BATCH_LOAD_FAILED");
+  }
+
+  if (!batch) {
+    throw new ApiError(404, "전체 교체 내역을 찾을 수 없습니다.", null, "BULK_REPLACE_BATCH_NOT_FOUND");
+  }
+
+  if (batch.status !== "PREVIEW") {
+    throw new ApiError(400, "미리보기 상태의 전체 교체 내역만 등록할 수 있습니다.", null, "BULK_REPLACE_BATCH_NOT_PREVIEW");
+  }
+
+  if (batch.invalid_rows > 0) {
+    throw new ApiError(400, "오류 행이 있어 전체 교체를 실행할 수 없습니다.", null, "BULK_REPLACE_HAS_INVALID_ROWS");
+  }
+
+  const { data: rows, error: rowError } = await client
+    .from("bulk_import_rows")
+    .select("id, batch_id, row_number, raw_data, normalized_data, valid, errors, directive_id, created_at")
+    .eq("batch_id", input.batchId)
+    .order("row_number", { ascending: true });
+
+  if (rowError) {
+    throw new ApiError(500, "전체 교체 행을 불러오지 못했습니다.", rowError, "BULK_REPLACE_ROWS_LOAD_FAILED");
+  }
+
+  const replaceRows = ((rows ?? []) as BulkImportRowRow[]).filter((row) => row.valid && !row.directive_id);
+
+  if (replaceRows.length === 0) {
+    throw new ApiError(400, "등록 가능한 지시사항이 없습니다.", null, "BULK_REPLACE_ROWS_REQUIRED");
+  }
+
+  const departments = await loadBulkDepartments(client);
+  const archivedAt = new Date().toISOString();
+  const archiveSuffix = archivedAt.replace(/\D/g, "").slice(0, 14);
+  const archivedCount = await archiveActiveDirectivesForReplace(client, session, archivedAt, archiveSuffix);
+  const plannedDirectiveNos = replaceRows.flatMap((row) => (row.normalized_data?.directiveNo ? [row.normalized_data.directiveNo] : []));
+
+  await releaseDirectiveNumberConflicts(client, session, plannedDirectiveNos, archivedAt, archiveSuffix);
+
+  const createdDirectiveIds: string[] = [];
+
+  for (const row of replaceRows) {
+    const directive = await createReplaceDirective(client, session, row, departments);
+    const { error: updateRowError } = await client
+      .from("bulk_import_rows")
+      .update({
+        directive_id: directive.id,
+      })
+      .eq("id", row.id)
+      .is("directive_id", null);
+
+    if (updateRowError) {
+      throw new ApiError(500, "전체 교체 행의 등록 결과를 저장하지 못했습니다.", updateRowError, "BULK_REPLACE_ROW_UPDATE_FAILED");
+    }
+
+    createdDirectiveIds.push(directive.id);
+  }
+
+  const registeredAt = new Date().toISOString();
+  const { error: batchUpdateError } = await client
+    .from("bulk_import_batches")
+    .update({
+      archive_reason: DIRECTIVE_REPLACE_ARCHIVE_REASON,
+      archived_directives_count: archivedCount,
+      registered_at: registeredAt,
+      status: "REGISTERED",
+    })
+    .eq("id", input.batchId);
+
+  if (batchUpdateError) {
+    throw new ApiError(500, "전체 교체 상태를 저장하지 못했습니다.", batchUpdateError, "BULK_REPLACE_BATCH_REGISTER_UPDATE_FAILED");
+  }
+
+  await recordHistory(client, {
+    action: "BULK_DIRECTIVE_REPLACE_REGISTERED",
+    actorId: session.userId,
+    entityId: input.batchId,
+    entityType: "bulk_import_batch",
+    metadata: {
+      archivedCount,
+      createdDirectiveIds,
+      registeredCount: createdDirectiveIds.length,
+    },
+  });
+
+  return {
+    archivedCount,
+    createdDirectiveIds,
+    message: "기존 지시사항을 숨기고 엑셀 지시사항을 등록했습니다.",
     registeredCount: createdDirectiveIds.length,
   };
 }

@@ -15,6 +15,16 @@ export const BULK_DIRECTIVE_REQUIRED_COLUMNS = [
   "비고",
 ] as const;
 
+export const BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS = [
+  "No.",
+  "회의일",
+  "주관",
+  "지시사항",
+  "담당부서",
+  "상태",
+  "기한",
+] as const;
+
 export const BULK_DIRECTIVE_ALLOWED_DEPARTMENTS = [
   "전체",
   "경영관리센터",
@@ -25,10 +35,14 @@ export const BULK_DIRECTIVE_ALLOWED_DEPARTMENTS = [
 
 export const BULK_DIRECTIVE_STATUS_LABEL_TO_VALUE: Record<string, DirectiveStatus> = {
   대기: "NEW",
+  신규: "NEW",
   완료: "COMPLETED",
   반려: "REJECTED",
   "승인 대기": "COMPLETION_REQUESTED",
   승인대기: "COMPLETION_REQUESTED",
+  완료요청: "COMPLETION_REQUESTED",
+  "완료 요청": "COMPLETION_REQUESTED",
+  지속: "IN_PROGRESS",
   진행중: "IN_PROGRESS",
   지연: "DELAYED",
 };

@@ -1,7 +1,7 @@
 import type { DirectiveStatus, DirectiveUrgentLevel } from "@/features/directives";
 
 export type BulkImportBatchStatus = "CANCELED" | "FAILED" | "PREVIEW" | "REGISTERED";
-export type BulkImportType = "DIRECTIVE";
+export type BulkImportType = "DIRECTIVE" | "DIRECTIVE_REPLACE";
 
 export type BulkDirectiveDepartment = {
   code: string | null;
@@ -15,14 +15,20 @@ export type BulkDirectiveNormalizedData = {
   content: string;
   departmentIds: string[];
   departments: string[];
+  directiveNo?: string | null;
   dueDate: string | null;
   isUrgent: boolean;
   meetingDate: string;
   note: string | null;
+  sequence?: number | null;
+  sourceNo?: string | null;
   status: DirectiveStatus;
   statusLabel: string;
+  targetScope?: "ALL" | "SELECTED";
   title: string;
   urgentLevel: DirectiveUrgentLevel | null;
+  warnings?: string[];
+  yearMonth?: string | null;
 };
 
 export type BulkDirectivePreviewRow = {
@@ -30,6 +36,7 @@ export type BulkDirectivePreviewRow = {
   chairRole: string | null;
   content: string;
   departments: string[];
+  directiveNo?: string | null;
   dueDate: string | null;
   errors: string[];
   isUrgent: boolean;
@@ -41,17 +48,22 @@ export type BulkDirectivePreviewRow = {
   title: string;
   urgentLevel: DirectiveUrgentLevel | null;
   valid: boolean;
+  warnings?: string[];
 };
 
 export type BulkDirectivePreviewResponse = {
+  activeDirectivesCount?: number;
   batchId: string;
   invalidRows: number;
+  replaceMode?: boolean;
   rows: BulkDirectivePreviewRow[];
   totalRows: number;
   validRows: number;
 };
 
 export type BulkImportBatchRow = {
+  archived_directives_count?: number | null;
+  archive_reason?: string | null;
   created_at: string;
   created_by: string;
   file_name: string;
@@ -62,6 +74,7 @@ export type BulkImportBatchRow = {
   total_rows: number;
   type: BulkImportType;
   valid_rows: number;
+  replace_mode?: boolean | null;
 };
 
 export type BulkImportRowRow = {
@@ -77,6 +90,8 @@ export type BulkImportRowRow = {
 };
 
 export type BulkDirectiveBatchItem = {
+  archivedDirectivesCount?: number;
+  archiveReason?: string | null;
   createdAt: string;
   createdByName: string | null;
   fileName: string;
@@ -97,6 +112,10 @@ export type BulkDirectiveRegisterResult = {
   createdDirectiveIds: string[];
   message: string;
   registeredCount: number;
+};
+
+export type BulkDirectiveReplaceRegisterResult = BulkDirectiveRegisterResult & {
+  archivedCount: number;
 };
 
 export type BulkDirectiveArchiveResult = {
