@@ -13,6 +13,7 @@ import type {
   BulkDirectiveManagementData,
   BulkDirectivePreviewResponse,
   BulkDirectiveRegisterResult,
+  BulkDirectiveReplaceRegisterResult,
   BulkDirectiveArchiveResult,
 } from "@/features/bulk-directives/types";
 import { readApiResponse } from "@/lib/api";
@@ -20,10 +21,11 @@ import { cn, formatDateTimeLabel } from "@/lib";
 
 import { Button } from "@/components/ui/button";
 
-type BulkTab = "archive" | "history" | "upload";
+type BulkTab = "archive" | "history" | "replace" | "upload";
 
 const tabs: Array<{ id: BulkTab; label: string }> = [
   { id: "upload", label: "지시사항 일괄등록" },
+  { id: "replace", label: "지시사항 전체 교체" },
   { id: "history", label: "등록 내역" },
   { id: "archive", label: "일괄 비노출" },
 ];
@@ -60,6 +62,9 @@ export function BulkDataManagementClient({ initialData }: { initialData: BulkDir
   const [batches, setBatches] = useState(initialData.batches);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<BulkDirectivePreviewResponse | null>(null);
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replacePreview, setReplacePreview] = useState<BulkDirectivePreviewResponse | null>(null);
+  const [replaceConfirmText, setReplaceConfirmText] = useState("");
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [archiveBatchId, setArchiveBatchId] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
@@ -68,6 +73,8 @@ export function BulkDataManagementClient({ initialData }: { initialData: BulkDir
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isReplacePreviewing, setIsReplacePreviewing] = useState(false);
+  const [isReplacing, setIsReplacing] = useState(false);
 
   const selectableRows = useMemo(() => preview?.rows.filter((row) => row.valid && row.batchRowId) ?? [], [preview]);
   const selectedCount = selectedRowIds.length;
@@ -80,6 +87,14 @@ export function BulkDataManagementClient({ initialData }: { initialData: BulkDir
     setFile(event.target.files?.[0] ?? null);
     setPreview(null);
     setSelectedRowIds([]);
+    setMessage(null);
+    setError(null);
+  }
+
+  function handleReplaceFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setReplaceFile(event.target.files?.[0] ?? null);
+    setReplacePreview(null);
+    setReplaceConfirmText("");
     setMessage(null);
     setError(null);
   }
@@ -153,6 +168,84 @@ export function BulkDataManagementClient({ initialData }: { initialData: BulkDir
       setError(caughtError instanceof Error ? caughtError.message : "선택한 지시사항을 등록하지 못했습니다.");
     } finally {
       setIsRegistering(false);
+    }
+  }
+
+  async function handleReplacePreview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+    setError(null);
+
+    if (!replaceFile) {
+      setError("전체 교체에 사용할 엑셀 파일을 선택해주세요.");
+      return;
+    }
+
+    setIsReplacePreviewing(true);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", replaceFile);
+
+      const response = await fetch("/api/admin/bulk-directives/replace-preview", {
+        body: formData,
+        method: "POST",
+      });
+      const result = await readApiResponse<BulkDirectivePreviewResponse>(response);
+
+      setReplacePreview(result);
+      setReplaceConfirmText("");
+      setMessage("전체 교체 검증 완료");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "전체 교체 검증을 완료하지 못했습니다.");
+    } finally {
+      setIsReplacePreviewing(false);
+    }
+  }
+
+  async function handleReplaceRegister() {
+    if (!replacePreview) {
+      setError("먼저 전체 교체 엑셀 파일을 검증해주세요.");
+      return;
+    }
+
+    if (replacePreview.invalidRows > 0) {
+      setError("오류가 있는 행이 있어 전체 교체를 실행할 수 없습니다.");
+      return;
+    }
+
+    if (replaceConfirmText.trim() !== "전체교체") {
+      setError("확인 문구로 전체교체를 입력해주세요.");
+      return;
+    }
+
+    setMessage(null);
+    setError(null);
+    setIsReplacing(true);
+
+    try {
+      const response = await fetch("/api/admin/bulk-directives/replace-register", {
+        body: JSON.stringify({
+          batchId: replacePreview.batchId,
+          confirmText: replaceConfirmText.trim(),
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const result = await readApiResponse<BulkDirectiveReplaceRegisterResult>(response);
+
+      refreshBatchStatus(replacePreview.batchId, {
+        archivedDirectivesCount: result.archivedCount,
+        registeredAt: new Date().toISOString(),
+        registeredCount: result.registeredCount,
+        status: "REGISTERED",
+      });
+      setMessage(result.message);
+      setReplaceConfirmText("");
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "전체 교체를 완료하지 못했습니다.");
+    } finally {
+      setIsReplacing(false);
     }
   }
 
@@ -369,6 +462,128 @@ export function BulkDataManagementClient({ initialData }: { initialData: BulkDir
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeTab === "replace" ? (
+        <section className="space-y-5 rounded-[30px] border border-amber-200 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)] sm:p-6">
+          <div>
+            <p className="text-sm font-black text-amber-700">운영 데이터 교체</p>
+            <h2 className="mt-1 text-xl font-black text-ink-950">지시사항 전체 교체</h2>
+            <div className="mt-3 rounded-[24px] border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
+              <p>기존 지시사항은 화면에서 모두 숨겨지고, 엑셀 데이터로 새로 등록됩니다.</p>
+              <p className="mt-1">실제 데이터는 삭제되지 않으며 개발자가 복구할 수 있습니다.</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleReplacePreview} className="flex flex-col gap-4 lg:flex-row lg:items-end">
+            <label className="flex-1" htmlFor="bulk-directive-replace-file">
+              <span className="text-sm font-bold text-ink-800">전체 교체 엑셀 업로드</span>
+              <span className="mt-2 flex h-12 w-full items-center justify-between gap-3 rounded-[22px] border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-ink-900">
+                <span className="truncate">{replaceFile?.name ?? "통합 지시사항 시트가 있는 파일을 선택해주세요"}</span>
+                <span className="rounded-full bg-amber-700 px-4 py-2 text-sm font-bold text-white">파일 선택</span>
+              </span>
+              <input
+                id="bulk-directive-replace-file"
+                type="file"
+                accept=".xlsx"
+                onChange={handleReplaceFileChange}
+                className="sr-only"
+              />
+            </label>
+            <Button type="submit" variant="secondary" isLoading={isReplacePreviewing} loadingLabel="검증 중입니다">
+              검증하기
+            </Button>
+          </form>
+
+          {replacePreview ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-[22px] bg-ink-950 p-4 text-white">
+                  <p className="text-sm font-bold text-white/75">기존 활성 지시사항</p>
+                  <p className="mt-2 text-3xl font-black">{replacePreview.activeDirectivesCount ?? 0}</p>
+                </div>
+                <div className="rounded-[22px] bg-brand-50 p-4 text-brand-900">
+                  <p className="text-sm font-bold">엑셀 등록 예정</p>
+                  <p className="mt-2 text-3xl font-black">{replacePreview.totalRows}</p>
+                </div>
+                <div className="rounded-[22px] bg-rose-50 p-4 text-rose-700">
+                  <p className="text-sm font-bold">오류</p>
+                  <p className="mt-2 text-3xl font-black">{replacePreview.invalidRows}</p>
+                </div>
+                <div className="rounded-[22px] bg-emerald-50 p-4 text-emerald-800">
+                  <p className="text-sm font-bold">등록 가능</p>
+                  <p className="mt-2 text-3xl font-black">{replacePreview.validRows}</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-[24px] border border-brand-100">
+                <table className="min-w-[88rem] w-full border-collapse bg-white text-left text-sm">
+                  <thead className="bg-brand-50 text-xs font-black text-brand-900">
+                    <tr>
+                      <th className="px-4 py-3">행번호</th>
+                      <th className="px-4 py-3">관리번호 예정</th>
+                      <th className="px-4 py-3">회의일</th>
+                      <th className="px-4 py-3">주관</th>
+                      <th className="px-4 py-3">지시사항</th>
+                      <th className="px-4 py-3">담당부서</th>
+                      <th className="px-4 py-3">상태</th>
+                      <th className="px-4 py-3">기한</th>
+                      <th className="px-4 py-3">오류</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-50">
+                    {replacePreview.rows.map((row) => (
+                      <tr key={`${row.rowNumber}-${row.directiveNo ?? row.title}`} className={row.valid ? "bg-white" : "bg-rose-50/70"}>
+                        <td className="px-4 py-3 font-bold text-ink-900">{row.rowNumber}</td>
+                        <td className="px-4 py-3 font-black text-brand-900">{row.directiveNo ?? "-"}</td>
+                        <td className="px-4 py-3">{row.meetingDate}</td>
+                        <td className="px-4 py-3">{row.chairRole ?? "-"}</td>
+                        <td className="max-w-[28rem] px-4 py-3">
+                          <p className="truncate font-bold text-ink-950">{row.title}</p>
+                        </td>
+                        <td className="px-4 py-3 text-ink-700">{row.departments.join(", ") || "-"}</td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-xs font-black text-brand-800">
+                            {row.statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">{row.dueDate ?? "-"}</td>
+                        <td className="max-w-[24rem] px-4 py-3 text-rose-700">
+                          <p className="truncate font-semibold">{row.errors.join(", ") || row.warnings?.join(", ") || "-"}</p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-[24px] border border-amber-200 bg-amber-50 p-4">
+                <label htmlFor="replace-confirm-text" className="text-sm font-bold text-ink-900">
+                  실행하려면 전체교체를 입력해주세요
+                </label>
+                <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <input
+                    id="replace-confirm-text"
+                    value={replaceConfirmText}
+                    onChange={(event) => setReplaceConfirmText(event.target.value)}
+                    placeholder="전체교체"
+                    className="h-12 flex-1 rounded-[22px] border border-amber-200 bg-white px-4 text-sm font-semibold text-ink-900"
+                  />
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={handleReplaceRegister}
+                    disabled={replacePreview.invalidRows > 0 || replaceConfirmText.trim() !== "전체교체"}
+                    isLoading={isReplacing}
+                    loadingLabel="교체 중입니다"
+                  >
+                    기존 지시사항 비노출 후 등록
+                  </Button>
+                </div>
               </div>
             </div>
           ) : null}

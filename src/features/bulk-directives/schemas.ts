@@ -5,6 +5,13 @@ export const bulkDirectiveRegisterSchema = z.object({
   selectedRowIds: z.array(z.string().uuid()).min(1, "등록할 행을 선택해주세요."),
 });
 
+export const bulkDirectiveReplaceRegisterSchema = z.object({
+  batchId: z.string().uuid(),
+  confirmText: z.string().trim().refine((value) => value === "전체교체", {
+    message: "확인 문구로 전체교체를 입력해주세요.",
+  }),
+});
+
 export const bulkDirectiveArchiveSchema = z
   .object({
     batchId: z.string().uuid().optional(),

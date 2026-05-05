@@ -131,3 +131,74 @@ test("일괄관리 화면은 한국어 미리보기와 등록 내역, 비노출 
     assert.equal(client.includes(`placeholder="${word}"`), false);
   }
 });
+
+test("지시사항 전체 교체 API와 운영 안전장치가 제공된다", () => {
+  const previewRoutePath = "src/app/api/admin/bulk-directives/replace-preview/route.ts";
+  const registerRoutePath = "src/app/api/admin/bulk-directives/replace-register/route.ts";
+
+  assert.equal(exists(previewRoutePath), true);
+  assert.equal(exists(registerRoutePath), true);
+
+  const previewRoute = read(previewRoutePath);
+  const registerRoute = read(registerRoutePath);
+  const service = read("src/features/bulk-directives/service.ts");
+  const schemas = read("src/features/bulk-directives/schemas.ts");
+
+  assert.match(previewRoute, /previewReplaceDirectivesAsSession/);
+  assert.match(registerRoute, /registerReplaceDirectivesAsSession/);
+  assert.match(schemas, /bulkDirectiveReplaceRegisterSchema/);
+  assert.match(schemas, /confirmText/);
+  assert.match(schemas, /전체교체/);
+  assert.match(service, /DIRECTIVE_REPLACE/);
+  assert.match(service, /통합 지시사항/);
+  assert.doesNotMatch(service, /대표이사 지시사항["']/);
+  assert.doesNotMatch(service, /부사장 지시사항["']/);
+  assert.match(service, /is_archived:\s*true/);
+  assert.match(service, /OLD-\$\{directive\.directive_no\}/);
+  assert.match(service, /엑셀 재등록 전 기존 지시사항 전체 비노출/);
+  assert.doesNotMatch(service, /\.delete\(/);
+  assert.doesNotMatch(previewRoute, /\.delete\(/);
+  assert.doesNotMatch(registerRoute, /\.delete\(/);
+});
+
+test("엑셀 전체 교체는 통합 시트의 부서와 상태를 운영 기준으로 매핑한다", () => {
+  const constants = read("src/features/bulk-directives/constants.ts");
+  const service = read("src/features/bulk-directives/service.ts");
+
+  assert.match(constants, /BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS/);
+  assert.match(constants, /No\./);
+  assert.match(constants, /기한/);
+  assert.match(constants, /지속:\s*"IN_PROGRESS"/);
+  assert.match(constants, /신규:\s*"NEW"/);
+  assert.match(constants, /완료요청:\s*"COMPLETION_REQUESTED"/);
+  assert.match(service, /기획영업부["'],\s*["']영업본부/);
+  assert.match(service, /구매물류부["'],\s*["']구매물류부/);
+  assert.match(service, /전 부서["'],\s*["']전체/);
+  assert.match(service, /주식회사 씨엔푸드["'],\s*["']전체/);
+  assert.match(service, /HACCP["'],\s*["']공장총괄본부/);
+  assert.match(service, /resolveDepartments/);
+});
+
+test("지시사항 전체 교체 UI는 미리보기와 확인 문구를 거친다", () => {
+  const client = read("src/components/admin/bulk-data-management-client.tsx");
+
+  assert.match(client, /지시사항 전체 교체/);
+  assert.match(client, /기존 지시사항은 화면에서 모두 숨겨지고, 엑셀 데이터로 새로 등록됩니다/);
+  assert.match(client, /실제 데이터는 삭제되지 않으며 개발자가 복구할 수 있습니다/);
+  assert.match(client, /기존 활성 지시사항/);
+  assert.match(client, /관리번호 예정/);
+  assert.match(client, /기존 지시사항 비노출 후 등록/);
+  assert.match(client, /전체교체/);
+  assert.match(client, /replace-preview/);
+  assert.match(client, /replace-register/);
+});
+
+test("지시사항 전체 교체 마이그레이션은 복구 가능 정보를 보존한다", () => {
+  const migration = read("supabase/migrations/202605050002_directive_replace_imports.sql");
+
+  assert.match(migration, /DIRECTIVE_REPLACE/);
+  assert.match(migration, /replace_mode boolean/);
+  assert.match(migration, /archived_directives_count int/);
+  assert.match(migration, /archive_reason text null/);
+  assert.match(migration, /archived_at timestamptz null/);
+});
