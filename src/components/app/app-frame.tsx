@@ -21,6 +21,7 @@ function getNavigationItems(session: AppSession): NavigationItem[] {
     const adminItems: NavigationItem[] = [
       { href: "/dashboard/ceo", label: "대표 대시보드" },
       { href: "/directives", label: "지시 관리" },
+      { href: "/admin/bulk-data", label: "데이터 일괄관리" },
       { href: "/meetings", label: "회의실 입장" },
       { href: "/directives/approval-queue", label: "승인 대기" },
       { href: "/reports", label: "주간 보고" },
