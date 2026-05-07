@@ -34,11 +34,14 @@ export interface DepartmentAnalysisItem {
   delayedCount: number;
   departmentId: string;
   departmentName: string;
+  executionGrade: "양호" | "우수" | "위험" | "주의";
+  executionScore: number;
   inProgressCount: number;
   rejectedCount: number;
   totalCount: number;
   urgentCount: number;
   waitingApprovalCount: number;
+  waitingApprovalStaleCount: number;
 }
 
 export interface CeoExecutiveSummary {

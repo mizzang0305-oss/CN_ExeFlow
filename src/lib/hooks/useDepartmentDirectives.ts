@@ -10,6 +10,7 @@ import {
 
 export type DepartmentDirectiveItem = {
   created_at: string;
+  department_name: string | null;
   directive_no: string;
   id: string;
   is_urgent: boolean;

@@ -96,6 +96,12 @@ function mapFallbackItem(item: DirectiveListItem, departmentId: string | null) {
 
   return {
     created_at: item.lastActivityAt,
+    department_name:
+      assignment?.departmentName ??
+      item.assignedDepartments.find((department) => department.departmentId === item.currentDepartmentId)?.departmentName ??
+      item.ownerDepartmentName ??
+      item.assignedDepartments[0]?.departmentName ??
+      null,
     directive_no: item.directiveNo,
     id: item.id,
     is_urgent: item.isUrgent,
@@ -203,6 +209,7 @@ function buildDirectResponse({
       return [
         {
           created_at: directive.created_at,
+          department_name: department.name,
           directive_no: directive.directive_no,
           id: directive.id,
           is_urgent: directive.is_urgent,

@@ -140,6 +140,16 @@ export default async function DepartmentBoardPage() {
     .filter((item) => item.currentDepartmentStatus === "IN_PROGRESS" || item.currentDepartmentStatus === "DELAYED")
     .slice(0, 4);
   const rejectedItems = board.items.filter((item) => item.currentDepartmentStatus === "REJECTED").slice(0, 4);
+  const departmentItems = board.items;
+  const waitingItems = departmentItems.filter((item) => item.currentDepartmentStatus === "NEW");
+  const inProgressItems = departmentItems.filter((item) =>
+    ["NEW", "IN_PROGRESS"].includes(item.currentDepartmentStatus ?? item.status),
+  );
+  const urgentItems = departmentItems.filter((item) => item.isUrgent && item.status !== "COMPLETED");
+  const completionRequestItems = departmentItems.filter((item) => item.currentDepartmentStatus === "COMPLETION_REQUESTED");
+  const todayActionLogItems = departmentItems.filter(
+    (item) => item.status !== "COMPLETED" && (item.logCount === 0 || item.attachmentCount === 0),
+  );
 
   return (
     <AppFrame
@@ -150,6 +160,37 @@ export default async function DepartmentBoardPage() {
       description="우리 부서 KPI, 담당자별 실행 현황, 완료 요청과 재진행 흐름을 한 번에 처리할 수 있게 정리했습니다."
     >
       <div className="space-y-6">
+        <section aria-label="부서장 요약" className="rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)] sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-base font-bold text-brand-700">오늘 처리할 지시</p>
+              <h2 className="mt-1 text-3xl font-bold text-ink-950">{session.departmentName ?? "내 부서"} 실행 요약</h2>
+            </div>
+            <p className="text-base font-semibold text-ink-700">내 부서 데이터만 표시합니다.</p>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+            {[
+              ["내 부서 전체 지시", departmentItems.length, "전체"],
+              ["대기", waitingItems.length, "시작 필요"],
+              ["진행중", inProgressItems.length, "처리 중"],
+              ["지연", delayedItems.length, "지연 주의"],
+              ["긴급", urgentItems.length, "즉시 확인"],
+              ["완료 요청", completionRequestItems.length, "완료 요청 가능"],
+              ["오늘 입력해야 할 행동 로그", todayActionLogItems.length, "증빙 필요"],
+            ].map(([label, value, helper]) => (
+              <div
+                key={String(label)}
+                className="rounded-[22px] border border-ink-100 bg-ink-50 px-4 py-4"
+              >
+                <p className="text-base font-bold text-ink-800">{label}</p>
+                <p className="mt-2 text-4xl font-bold text-ink-950">{value}</p>
+                <p className="mt-1 text-sm font-semibold text-ink-700">{helper}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="panel-strong relative overflow-hidden p-6 sm:p-8">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(47,130,237,0.14),transparent_30%)]" />
           <div className="relative grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">

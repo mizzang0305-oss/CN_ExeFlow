@@ -88,6 +88,41 @@ function sortByDueDate(items: DirectiveListItem[]) {
   });
 }
 
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getExecutionGrade(score: number): DepartmentAnalysisItem["executionGrade"] {
+  if (score >= 90) {
+    return "우수";
+  }
+
+  if (score >= 75) {
+    return "양호";
+  }
+
+  if (score >= 60) {
+    return "주의";
+  }
+
+  return "위험";
+}
+
+function calculateExecutionScore(department: Pick<
+  DepartmentAnalysisItem,
+  "completionRate" | "delayedCount" | "urgentCount" | "waitingApprovalStaleCount"
+>) {
+  const completionAdjustment = Math.round((department.completionRate - 70) / 10);
+  const rawScore =
+    100 -
+    department.delayedCount * 8 -
+    department.urgentCount * 10 -
+    department.waitingApprovalStaleCount * 4 +
+    completionAdjustment;
+
+  return clampScore(rawScore);
+}
+
 function buildDirectiveQueueItem(
   item: DirectiveListItem,
   options: {
@@ -125,6 +160,7 @@ async function loadDepartmentName(departmentId: string) {
 
 function summarizeDepartments(items: DirectiveListItem[]): DepartmentAnalysisItem[] {
   const summaryMap = new Map<string, DepartmentAnalysisItem>();
+  const staleApprovalThreshold = Date.now() - 5 * 24 * 60 * 60 * 1000;
 
   for (const item of items) {
     const assignments =
@@ -149,11 +185,14 @@ function summarizeDepartments(items: DirectiveListItem[]): DepartmentAnalysisIte
         delayedCount: 0,
         departmentId: assignment.departmentId,
         departmentName: assignment.departmentName ?? "미지정 부서",
+        executionGrade: "양호",
+        executionScore: 100,
         inProgressCount: 0,
         rejectedCount: 0,
         totalCount: 0,
         urgentCount: 0,
         waitingApprovalCount: 0,
+        waitingApprovalStaleCount: 0,
       };
 
       current.totalCount += 1;
@@ -163,15 +202,31 @@ function summarizeDepartments(items: DirectiveListItem[]): DepartmentAnalysisIte
       current.rejectedCount += assignment.departmentStatus === "REJECTED" ? 1 : 0;
       current.urgentCount += item.isUrgent ? 1 : 0;
       current.waitingApprovalCount += assignment.departmentStatus === "COMPLETION_REQUESTED" ? 1 : 0;
+      current.waitingApprovalStaleCount +=
+        assignment.departmentStatus === "COMPLETION_REQUESTED" &&
+        item.lastActivityAt &&
+        new Date(item.lastActivityAt).getTime() < staleApprovalThreshold
+          ? 1
+          : 0;
       summaryMap.set(key, current);
     }
   }
 
   return Array.from(summaryMap.values())
-    .map((department) => ({
-      ...department,
-      completionRate: department.totalCount === 0 ? 0 : Math.round((department.completedCount / department.totalCount) * 100),
-    }))
+    .map((department) => {
+      const completionRate = department.totalCount === 0 ? 0 : Math.round((department.completedCount / department.totalCount) * 100);
+      const scoreBase = {
+        ...department,
+        completionRate,
+      };
+      const executionScore = calculateExecutionScore(scoreBase);
+
+      return {
+        ...scoreBase,
+        executionGrade: getExecutionGrade(executionScore),
+        executionScore,
+      };
+    })
     .sort((left, right) => {
       const leftRisk = left.delayedCount + left.waitingApprovalCount + left.urgentCount;
       const rightRisk = right.delayedCount + right.waitingApprovalCount + right.urgentCount;

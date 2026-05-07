@@ -89,9 +89,11 @@ test("우측 확인창은 compact 리스트와 날짜순 정렬 조작을 제공
   assert.match(panel, /오래된순/);
   assert.match(panel, /sortOrder/);
   assert.match(list, /관리번호/);
-  assert.match(list, /최근 기준/);
+  assert.match(list, /기준일/);
   assert.match(list, /긴급/);
-  assert.match(list, /min-w-\[54rem\]/);
+  assert.match(list, /부서/);
+  assert.match(list, /기준일/);
+  assert.match(list, /min-w-\[64rem\]/);
   assert.match(list, /truncate/);
   assert.doesNotMatch(list, /<article\b/);
 });

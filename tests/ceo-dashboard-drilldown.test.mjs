@@ -78,6 +78,66 @@ test("대표 대시보드 상태 라벨은 한국어 고정값을 사용한다",
   }
 });
 
+test("대표 대시보드는 이행 점수와 부서별 그래프를 제공한다", () => {
+  const dashboardSource = read("src/components/dashboard/ceo-dashboard-client.tsx");
+  const serviceSource = read("src/features/dashboard/service.ts");
+  const typesSource = read("src/features/dashboard/types.ts");
+  const cardSource = read("src/components/ceo/DepartmentProgressCard.tsx");
+
+  assert.match(typesSource, /executionScore/);
+  assert.match(typesSource, /executionGrade/);
+  assert.match(typesSource, /waitingApprovalStaleCount/);
+  assert.match(serviceSource, /calculateExecutionScore/);
+  assert.match(serviceSource, /delayedCount \* 8/);
+  assert.match(serviceSource, /urgentCount \* 10/);
+  assert.match(serviceSource, /waitingApprovalStaleCount \* 4/);
+  assert.match(serviceSource, /score >= 90/);
+  assert.match(serviceSource, /score >= 75/);
+  assert.match(serviceSource, /score >= 60/);
+  assert.match(dashboardSource, /부서 이행 순위/);
+  assert.match(dashboardSource, /이행 점수/);
+  assert.match(dashboardSource, /부서별 완료율/);
+  assert.match(dashboardSource, /부서별 지연 현황/);
+  assert.match(dashboardSource, /긴급 처리 현황/);
+  assert.match(cardSource, /department\.executionScore/);
+  assert.match(cardSource, /department\.executionGrade/);
+});
+
+test("대표 대시보드는 오늘 확인할 실행 리스크에서 기존 우측 확인창 필터를 연다", () => {
+  const dashboardSource = read("src/components/dashboard/ceo-dashboard-client.tsx");
+
+  assert.match(dashboardSource, /오늘 확인할 실행 리스크/);
+  assert.match(dashboardSource, /지연 1건 이상|지연 \$\{department\.delayedCount\}건 확인 필요/);
+  assert.match(dashboardSource, /긴급 \$\{department\.urgentCount\}건 처리 필요/);
+  assert.match(dashboardSource, /승인 대기 \$\{department\.waitingApprovalCount\}건 확인 필요/);
+  assert.match(dashboardSource, /해당 부서 보기/);
+  assert.match(dashboardSource, /지연 지시 보기/);
+  assert.match(dashboardSource, /긴급 지시 보기/);
+  assert.match(dashboardSource, /onStatusSelect\(department\.departmentId, "DELAYED", false\)/);
+  assert.match(dashboardSource, /onStatusSelect\(department\.departmentId, null, true\)/);
+  assert.match(dashboardSource, /selectDepartmentStatus/);
+  assert.match(dashboardSource, /selectGlobalStatus/);
+});
+
+test("부서장 실행보드는 자기 부서 요약을 큰 글자와 단순 문구로 보여준다", () => {
+  const boardSource = read("src/app/board/page.tsx");
+  const dashboardServiceSource = read("src/features/dashboard/service.ts");
+
+  assert.match(boardSource, /부서장 요약/);
+  assert.match(boardSource, /오늘 처리할 지시/);
+  assert.match(boardSource, /내 부서 전체 지시/);
+  assert.match(boardSource, /대기/);
+  assert.match(boardSource, /진행중/);
+  assert.match(boardSource, /지연 주의/);
+  assert.match(boardSource, /긴급/);
+  assert.match(boardSource, /완료 요청/);
+  assert.match(boardSource, /오늘 입력해야 할 행동 로그/);
+  assert.match(boardSource, /증빙 필요/);
+  assert.match(boardSource, /text-4xl/);
+  assert.match(dashboardServiceSource, /session\.role === "DEPARTMENT_HEAD" && session\.departmentId !== departmentId/);
+  assert.match(dashboardServiceSource, /본인 부서/);
+});
+
 test("대표 지시사항 쿼리는 잘못된 상태를 전체로 돌리고 제한을 적용한다", () => {
   const { normalizeCeoDirectiveQuery } = loadTypeScriptModule("src/lib/constants/status-labels.ts");
   const params = new URLSearchParams({
@@ -240,12 +300,15 @@ test("우측 확인창은 전체 보기와 부서 보기에 맞는 한국어 제
   assert.match(panelSource, /최신순/);
   assert.match(panelSource, /오래된순/);
   assert.match(listSource, /관리번호/);
-  assert.match(listSource, /최근 기준/);
+  assert.match(listSource, /기준일/);
   assert.match(listSource, /긴급/);
   assert.match(listSource, /상세/);
-  assert.match(listSource, /min-w-\[54rem\]/);
-  assert.match(listSource, /md:grid-cols-\[8rem_4\.5rem_minmax\(22rem,1fr\)_7\.5rem_4\.75rem_4\.75rem\]/);
-  assert.match(listSource, /truncate text-sm font-bold leading-snug/);
+  assert.match(listSource, /부서/);
+  assert.match(listSource, /기준일/);
+  assert.match(listSource, /department_name/);
+  assert.match(listSource, /min-w-\[64rem\]/);
+  assert.match(listSource, /md:grid-cols-\[8rem_4\.5rem_minmax\(22rem,1fr\)_7rem_7\.5rem_4\.75rem_5\.25rem\]/);
+  assert.match(listSource, /truncate text-base font-bold leading-snug/);
   assert.doesNotMatch(listSource, /<article\b/);
 });
 
