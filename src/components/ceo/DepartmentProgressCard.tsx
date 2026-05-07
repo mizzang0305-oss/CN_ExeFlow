@@ -89,6 +89,22 @@ function statusButtonClass(isActive: boolean, tone: StatusMetric["tone"]) {
   );
 }
 
+function gradeClassName(grade: DepartmentAnalysisItem["executionGrade"]) {
+  if (grade === "우수") {
+    return "border-success-200 bg-success-50 text-success-700";
+  }
+
+  if (grade === "양호") {
+    return "border-brand-200 bg-brand-50 text-brand-800";
+  }
+
+  if (grade === "주의") {
+    return "border-warning-200 bg-warning-50 text-warning-700";
+  }
+
+  return "border-danger-200 bg-danger-50 text-danger-700";
+}
+
 export function DepartmentProgressCard({
   activeStatus,
   activeUrgent,
@@ -183,7 +199,19 @@ export function DepartmentProgressCard({
         </span>
       </div>
 
-      <div className="mt-7">
+      <div className="mt-5 rounded-[22px] border border-ink-100 bg-ink-50 px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-base font-bold text-ink-700">이행 점수</p>
+            <p className="mt-1 text-4xl font-bold text-ink-950">{department.executionScore}</p>
+          </div>
+          <span className={cn("rounded-full border px-3 py-1 text-sm font-bold", gradeClassName(department.executionGrade))}>
+            {department.executionGrade}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-6">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-bold text-ink-600">완료율</p>
