@@ -88,14 +88,16 @@ test("우측 확인창은 compact 리스트와 날짜순 정렬 조작을 제공
   assert.match(panel, /최신순/);
   assert.match(panel, /오래된순/);
   assert.match(panel, /sortOrder/);
-  assert.match(list, /관리번호/);
-  assert.match(list, /기준일/);
-  assert.match(list, /긴급/);
-  assert.match(list, /부서/);
-  assert.match(list, /기준일/);
+  assert.match(list, /directive-row/);
+  assert.match(list, /directive-title-line/);
+  assert.match(list, /directive-meta-line/);
+  assert.match(list, /line-clamp-2/);
+  assert.match(list, /item\.title/);
+  assert.match(list, /item\.directive_no/);
   assert.match(list, /min-w-0/);
-  assert.match(list, /md:grid-cols-\[6\.5rem_4rem_minmax\(0,1fr\)_4\.75rem_5\.5rem_3\.75rem_4\.25rem\]/);
-  assert.match(list, /truncate/);
+  assert.match(list, /min-h-\[5\.75rem\]/);
+  assert.match(list, /break-words/);
+  assert.doesNotMatch(list, /md:grid-cols-\[6\.5rem_4rem_minmax\(0,1fr\)_4\.75rem_5\.5rem_3\.75rem_4\.25rem\]/);
   assert.doesNotMatch(list, /<article\b/);
 });
 

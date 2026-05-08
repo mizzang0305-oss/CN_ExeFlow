@@ -345,18 +345,31 @@ test("우측 확인창은 전체 보기와 부서 보기에 맞는 한국어 제
   assert.match(panelSource, /해당 부서의 전체 지시사항을 표시하고 있습니다/);
   assert.match(panelSource, /최신순/);
   assert.match(panelSource, /오래된순/);
-  assert.match(listSource, /관리번호/);
-  assert.match(listSource, /기준일/);
-  assert.match(listSource, /긴급/);
-  assert.match(listSource, /상세/);
-  assert.match(listSource, /부서/);
-  assert.match(listSource, /기준일/);
+  assert.match(listSource, /directive-row/);
+  assert.match(listSource, /directive-main/);
+  assert.match(listSource, /directive-title-line/);
+  assert.match(listSource, /directive-meta-line/);
+  assert.match(listSource, /directive-actions/);
   assert.match(listSource, /department_name/);
+  assert.match(listSource, /dateLabel/);
+  assert.match(listSource, /urgencyLabel/);
+  assert.match(listSource, /item\.directive_no/);
+  assert.match(listSource, /line-clamp-2/);
+  assert.match(listSource, /text-lg/);
+  assert.match(listSource, /font-semibold/);
+  assert.match(listSource, /min-h-\[5\.75rem\]/);
   assert.match(listSource, /overflow-hidden/);
   assert.match(listSource, /min-w-0/);
-  assert.match(listSource, /md:grid-cols-\[6\.5rem_4rem_minmax\(0,1fr\)_4\.75rem_5\.5rem_3\.75rem_4\.25rem\]/);
-  assert.match(listSource, /truncate text-base font-bold leading-snug/);
+  assert.match(listSource, /break-words/);
+  assert.match(listSource, /whitespace-normal/);
+  assert.doesNotMatch(listSource, /md:grid-cols-\[6\.5rem_4rem_minmax\(0,1fr\)_4\.75rem_5\.5rem_3\.75rem_4\.25rem\]/);
   assert.doesNotMatch(listSource, /<article\b/);
+
+  const titleIndex = listSource.indexOf("{item.title}");
+  const directiveNoIndex = listSource.indexOf("{item.directive_no}");
+  assert.ok(titleIndex > -1, "지시 제목이 렌더링되어야 합니다.");
+  assert.ok(directiveNoIndex > -1, "관리번호가 보조 정보로 렌더링되어야 합니다.");
+  assert.ok(titleIndex < directiveNoIndex, "지시 제목이 관리번호보다 먼저 보여야 합니다.");
 });
 
 test("부서 지시사항 로딩은 최소 표시 시간과 한국어 문구를 사용한다", () => {
