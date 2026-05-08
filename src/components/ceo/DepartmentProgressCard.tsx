@@ -176,16 +176,16 @@ export function DepartmentProgressCard({
       onKeyDown={handleKeyDown}
       onPointerEnter={() => onPrefetch(department.departmentId)}
       className={cn(
-        "executive-click-target group relative min-h-[21rem] rounded-[26px] border bg-white px-5 py-5 shadow-[0_18px_46px_rgba(6,18,38,0.08)] outline-none transition duration-200",
+        "executive-click-target group relative min-h-[21rem] min-w-0 overflow-hidden break-words whitespace-normal rounded-[26px] border bg-white px-5 py-5 shadow-[0_18px_46px_rgba(6,18,38,0.08)] outline-none transition duration-200",
         isSelected
           ? "border-brand-900 ring-4 ring-brand-100"
           : "border-white/80 hover:border-brand-300 hover:bg-brand-50/35",
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-2xl font-bold text-ink-950">{department.departmentName}</h3>
+            <h3 className="min-w-0 truncate text-2xl font-bold text-ink-950">{department.departmentName}</h3>
             {isSelected ? (
               <span className="rounded-full bg-brand-900 px-3 py-1 text-xs font-bold text-white">선택됨</span>
             ) : null}

@@ -30,6 +30,17 @@ type SummaryCard = {
   value: string;
 };
 
+type AnalysisModalType = "completion" | "ranking" | "risk" | "urgent";
+
+const analysisCardClassName =
+  "min-w-0 overflow-hidden break-words whitespace-normal rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]";
+
+const analysisActionClassName =
+  "management-clickable inline-flex min-h-11 items-center justify-center rounded-[16px] border border-brand-100 bg-brand-50 px-4 py-2 text-base font-bold text-brand-900 shadow-[0_10px_24px_rgba(6,18,38,0.08)] transition hover:border-brand-300 hover:bg-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300 active:translate-y-[1px]";
+
+const dangerActionClassName =
+  "management-clickable inline-flex min-h-11 items-center justify-center rounded-[16px] border border-danger-200 bg-danger-50 px-4 py-2 text-base font-bold text-danger-700 shadow-[0_10px_24px_rgba(220,38,38,0.08)] transition hover:border-danger-300 hover:bg-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-danger-200 active:translate-y-[1px]";
+
 function buildSummaryCards(data: CeoDashboardData): SummaryCard[] {
   const summary = data.executiveSummary;
 
@@ -173,17 +184,69 @@ function sortByRisk(departments: DepartmentAnalysisItem[]) {
   });
 }
 
-function DepartmentCompletionChart({ departments }: { departments: DepartmentAnalysisItem[] }) {
-  const visibleDepartments = sortByExecutionScore(departments).slice(0, 6);
+function getRiskLabel(department: DepartmentAnalysisItem) {
+  if (department.delayedCount > 0 || department.urgentCount > 0 || department.executionGrade === "위험") {
+    return "위험";
+  }
+
+  if (department.waitingApprovalCount > 0 || department.completionRate < 60 || department.executionGrade === "주의") {
+    return "주의";
+  }
+
+  return "정상";
+}
+
+function getRiskMessage(department: DepartmentAnalysisItem) {
+  if (department.delayedCount > 0) {
+    return `지연 ${department.delayedCount}건`;
+  }
+
+  if (department.urgentCount > 0) {
+    return `긴급 ${department.urgentCount}건`;
+  }
+
+  if (department.waitingApprovalCount > 0) {
+    return `승인 대기 ${department.waitingApprovalCount}건`;
+  }
+
+  return `완료율 ${department.completionRate}%`;
+}
+
+function AnalysisDetailButton({
+  children,
+  onClick,
+}: {
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="management-clickable mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-[16px] border border-ink-200 bg-white px-4 py-2 text-base font-bold text-ink-950 shadow-[0_10px_24px_rgba(6,18,38,0.08)] transition hover:border-brand-300 hover:bg-brand-50 focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300 active:translate-y-[1px] sm:w-auto"
+    >
+      {children} →
+    </button>
+  );
+}
+
+function DepartmentCompletionChart({
+  departments,
+  onOpenDetail,
+}: {
+  departments: DepartmentAnalysisItem[];
+  onOpenDetail: () => void;
+}) {
+  const visibleDepartments = sortByExecutionScore(departments).slice(0, 5);
 
   return (
-    <section className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+    <section className={analysisCardClassName}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
           <h3 className="text-xl font-bold text-ink-950">부서별 완료율</h3>
-          <p className="mt-1 text-base font-semibold text-ink-700">완료 비율이 높은 부서부터 보여줍니다.</p>
+          <p className="mt-1 line-clamp-2 text-base font-semibold text-ink-700">완료 비율이 높은 부서부터 요약합니다.</p>
         </div>
-        <span className="rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-sm font-bold text-brand-800">
+        <span className="shrink-0 rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-sm font-bold text-brand-800">
           완료
         </span>
       </div>
@@ -204,6 +267,8 @@ function DepartmentCompletionChart({ departments }: { departments: DepartmentAna
           </div>
         ))}
       </div>
+
+      <AnalysisDetailButton onClick={onOpenDetail}>자세히 보기</AnalysisDetailButton>
     </section>
   );
 }
@@ -213,13 +278,13 @@ function DepartmentDelayChart({ departments }: { departments: DepartmentAnalysis
   const maxDelayed = Math.max(1, ...visibleDepartments.map((department) => department.delayedCount));
 
   return (
-    <section className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+    <section className={analysisCardClassName}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
           <h3 className="text-xl font-bold text-ink-950">부서별 지연 현황</h3>
-          <p className="mt-1 text-base font-semibold text-ink-700">지연 건수는 색과 숫자로 함께 표시합니다.</p>
+          <p className="mt-1 line-clamp-2 text-base font-semibold text-ink-700">지연 건수는 색과 숫자로 함께 표시합니다.</p>
         </div>
-        <span className="rounded-full border border-danger-200 bg-danger-50 px-3 py-1 text-sm font-bold text-danger-700">
+        <span className="shrink-0 rounded-full border border-danger-200 bg-danger-50 px-3 py-1 text-sm font-bold text-danger-700">
           지연
         </span>
       </div>
@@ -247,106 +312,94 @@ function DepartmentDelayChart({ departments }: { departments: DepartmentAnalysis
   );
 }
 
-function UrgentSummaryPanel({ departments }: { departments: DepartmentAnalysisItem[] }) {
+function UrgentSummaryPanel({
+  departments,
+  onOpenDetail,
+}: {
+  departments: DepartmentAnalysisItem[];
+  onOpenDetail: () => void;
+}) {
   const urgentTotal = departments.reduce((sum, department) => sum + department.urgentCount, 0);
   const urgentDepartments = departments.filter((department) => department.urgentCount > 0).length;
   const delayedTotal = departments.reduce((sum, department) => sum + department.delayedCount, 0);
 
   return (
-    <section className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]">
+    <section className={analysisCardClassName}>
       <h3 className="text-xl font-bold text-ink-950">긴급 처리 현황</h3>
-      <p className="mt-1 text-base font-semibold text-ink-700">긴급과 지연을 같은 화면에서 확인합니다.</p>
+      <p className="mt-1 line-clamp-2 text-base font-semibold text-ink-700">긴급과 지연을 같은 화면에서 확인합니다.</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {[
           ["긴급 지시", `${urgentTotal}건`, "즉시 확인"],
           ["긴급 부서", `${urgentDepartments}곳`, "부서별 점검"],
           ["지연 지시", `${delayedTotal}건`, "기한 관리"],
         ].map(([label, value, helper]) => (
-          <div key={label} className="rounded-[22px] border border-ink-100 bg-ink-50 px-4 py-4">
+          <div key={label} className="min-w-0 overflow-hidden break-words whitespace-normal rounded-[22px] border border-ink-100 bg-ink-50 px-4 py-4">
             <p className="text-base font-bold text-ink-800">{label}</p>
             <p className="mt-2 text-3xl font-bold text-ink-950">{value}</p>
             <p className="mt-1 text-sm font-semibold text-ink-700">{helper}</p>
           </div>
         ))}
       </div>
+
+      <AnalysisDetailButton onClick={onOpenDetail}>자세히 보기</AnalysisDetailButton>
     </section>
   );
 }
 
 function DepartmentExecutionRanking({
   departments,
-  onSelect,
+  onOpenDetail,
 }: {
   departments: DepartmentAnalysisItem[];
-  onSelect: (departmentId: string) => void;
+  onOpenDetail: () => void;
 }) {
-  const rankedDepartments = sortByExecutionScore(departments).slice(0, 8);
+  const rankedDepartments = sortByExecutionScore(departments).slice(0, 5);
 
   return (
-    <section className="rounded-[28px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <section className={analysisCardClassName}>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-ink-950">부서 이행 순위</h2>
-          <p className="mt-1 text-base font-semibold text-ink-700">이행 점수는 지연, 긴급, 승인 대기 적체를 함께 반영합니다.</p>
+          <p className="mt-1 line-clamp-2 text-base font-semibold text-ink-700">이행 점수는 지연, 긴급, 승인 대기 적체를 함께 반영합니다.</p>
         </div>
-        <p className="text-sm font-bold text-ink-700">100점 기준</p>
+        <p className="shrink-0 rounded-full border border-ink-200 bg-ink-50 px-3 py-1 text-sm font-bold text-ink-700">100점 기준</p>
       </div>
 
-      <div className="mt-5 overflow-x-auto">
-        <table className="min-w-[48rem] w-full border-collapse text-left">
-          <thead>
-            <tr className="border-b border-ink-100 text-sm font-bold text-ink-700">
-              <th className="px-3 py-3">부서명</th>
-              <th className="px-3 py-3">완료율</th>
-              <th className="px-3 py-3">지연</th>
-              <th className="px-3 py-3">긴급</th>
-              <th className="px-3 py-3">승인 대기</th>
-              <th className="px-3 py-3">이행 점수</th>
-              <th className="px-3 py-3">확인</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {rankedDepartments.map((department) => (
-              <tr key={department.departmentId} className="hover:bg-brand-50/45">
-                <td className="px-3 py-4 text-lg font-bold text-ink-950">{department.departmentName}</td>
-                <td className="px-3 py-4 text-base font-bold text-ink-900">{department.completionRate}%</td>
-                <td className="px-3 py-4 text-base font-bold text-danger-700">{department.delayedCount}건</td>
-                <td className="px-3 py-4 text-base font-bold text-danger-700">{department.urgentCount}건</td>
-                <td className="px-3 py-4 text-base font-bold text-warning-700">{department.waitingApprovalCount}건</td>
-                <td className="px-3 py-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-3xl font-bold text-ink-950">{department.executionScore}</span>
-                    <span className={cn("rounded-full border px-3 py-1 text-sm font-bold", gradeClassName(department.executionGrade))}>
-                      {department.executionGrade}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-4">
-                  <button
-                    type="button"
-                    onClick={() => onSelect(department.departmentId)}
-                    className="management-clickable min-h-11 rounded-[16px] border border-brand-100 bg-brand-50 px-4 text-sm font-bold text-brand-900"
-                  >
-                    해당 부서 보기
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="mt-5 space-y-3">
+        {rankedDepartments.map((department) => (
+          <div
+            key={department.departmentId}
+            className="min-w-0 rounded-[20px] border border-ink-100 bg-ink-50 px-4 py-3"
+          >
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-lg font-bold text-ink-950">{department.departmentName}</p>
+                <p className="mt-1 truncate text-base font-semibold text-ink-700">
+                  완료율 {department.completionRate}% · 지연 {department.delayedCount}건
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="text-3xl font-bold text-ink-950">{department.executionScore}</p>
+                <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-sm font-bold", gradeClassName(department.executionGrade))}>
+                  {department.executionGrade}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
+
+      <AnalysisDetailButton onClick={onOpenDetail}>자세히 보기</AnalysisDetailButton>
     </section>
   );
 }
 
 function RiskSignalPanel({
   departments,
-  onDepartmentSelect,
-  onStatusSelect,
+  onOpenDetail,
 }: {
   departments: DepartmentAnalysisItem[];
-  onDepartmentSelect: (departmentId: string) => void;
-  onStatusSelect: (departmentId: string, status: DirectiveStatusValue | null, urgent?: boolean) => void;
+  onOpenDetail: () => void;
 }) {
   const riskDepartments = sortByRisk(departments)
     .filter(
@@ -356,16 +409,16 @@ function RiskSignalPanel({
         department.waitingApprovalCount > 0 ||
         department.completionRate < 60,
     )
-    .slice(0, 4);
+    .slice(0, 3);
 
   return (
-    <section className="rounded-[28px] border border-danger-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,247,247,0.86))] p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)]">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <section className={cn(analysisCardClassName, "border-danger-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(255,247,247,0.86))]")}>
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-2xl font-bold text-ink-950">오늘 확인할 실행 리스크</h2>
-          <p className="mt-1 text-base font-semibold text-ink-700">지연, 긴급, 승인 대기 적체를 먼저 보여줍니다.</p>
+          <p className="mt-1 line-clamp-2 text-base font-semibold text-ink-700">지연, 긴급, 승인 대기 적체를 먼저 보여줍니다.</p>
         </div>
-        <span className="rounded-full border border-danger-200 bg-danger-50 px-3 py-1 text-sm font-bold text-danger-700">
+        <span className="shrink-0 rounded-full border border-danger-200 bg-danger-50 px-3 py-1 text-sm font-bold text-danger-700">
           확인 필요
         </span>
       </div>
@@ -375,59 +428,176 @@ function RiskSignalPanel({
           오늘 즉시 확인할 위험 신호가 없습니다.
         </div>
       ) : (
-        <div className="mt-5 grid gap-3 xl:grid-cols-2">
+        <div className="mt-5 space-y-3">
           {riskDepartments.map((department) => {
-            const message = department.delayedCount > 0
-              ? `${department.departmentName}: 지연 ${department.delayedCount}건 확인 필요`
-              : department.urgentCount > 0
-                ? `${department.departmentName}: 긴급 ${department.urgentCount}건 처리 필요`
-                : department.waitingApprovalCount > 0
-                  ? `${department.departmentName}: 승인 대기 ${department.waitingApprovalCount}건 확인 필요`
-                  : `${department.departmentName}: 완료율 ${department.completionRate}%, 주의 필요`;
+            const riskLabel = getRiskLabel(department);
+            const message = getRiskMessage(department);
 
             return (
-              <div key={department.departmentId} className="rounded-[24px] border border-danger-100 bg-white px-5 py-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-bold text-ink-950">{message}</p>
-                    <p className="mt-2 text-base font-semibold text-ink-700">
-                      이행 점수 {department.executionScore}점 · {department.executionGrade}
-                    </p>
-                  </div>
-                  <span className={cn("rounded-full border px-3 py-1 text-sm font-bold", gradeClassName(department.executionGrade))}>
-                    {department.executionGrade}
+              <div key={department.departmentId} className="min-w-0 overflow-hidden rounded-[20px] border border-danger-100 bg-white px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-sm font-bold", riskLabel === "위험" ? "border-danger-200 bg-danger-50 text-danger-700" : "border-warning-200 bg-warning-50 text-warning-700")}>
+                    {riskLabel}
                   </span>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onDepartmentSelect(department.departmentId)}
-                    className="management-clickable min-h-11 rounded-[16px] border border-brand-100 bg-brand-50 px-4 text-sm font-bold text-brand-900"
-                  >
-                    해당 부서 보기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onStatusSelect(department.departmentId, "DELAYED", false)}
-                    className="management-clickable min-h-11 rounded-[16px] border border-danger-200 bg-danger-50 px-4 text-sm font-bold text-danger-700"
-                  >
-                    지연 지시 보기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onStatusSelect(department.departmentId, null, true)}
-                    className="management-clickable min-h-11 rounded-[16px] border border-danger-200 bg-white px-4 text-sm font-bold text-danger-700"
-                  >
-                    긴급 지시 보기
-                  </button>
+                  <p className="min-w-0 truncate text-lg font-bold text-ink-950">
+                    {department.departmentName} · {message}
+                  </p>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      <AnalysisDetailButton onClick={onOpenDetail}>위험 상세 보기</AnalysisDetailButton>
     </section>
+  );
+}
+
+function DepartmentActionButtons({
+  department,
+  onDepartmentSelect,
+  onStatusSelect,
+}: {
+  department: DepartmentAnalysisItem;
+  onDepartmentSelect: (departmentId: string) => void;
+  onStatusSelect: (departmentId: string, status: DirectiveStatusValue | null, urgent?: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      <button
+        type="button"
+        onClick={() => onDepartmentSelect(department.departmentId)}
+        className={analysisActionClassName}
+      >
+        부서 보기
+      </button>
+      <button
+        type="button"
+        onClick={() => onStatusSelect(department.departmentId, "DELAYED", false)}
+        className={dangerActionClassName}
+      >
+        지연 보기
+      </button>
+      <button
+        type="button"
+        onClick={() => onStatusSelect(department.departmentId, null, true)}
+        className={dangerActionClassName}
+      >
+        긴급 보기
+      </button>
+    </div>
+  );
+}
+
+function ExecutiveAnalysisModal({
+  departments,
+  kind,
+  onClose,
+  onDepartmentSelect,
+  onStatusSelect,
+}: {
+  departments: DepartmentAnalysisItem[];
+  kind: AnalysisModalType;
+  onClose: () => void;
+  onDepartmentSelect: (departmentId: string) => void;
+  onStatusSelect: (departmentId: string, status: DirectiveStatusValue | null, urgent?: boolean) => void;
+}) {
+  const titleMap: Record<AnalysisModalType, string> = {
+    completion: "부서별 완료율 상세",
+    ranking: "부서 이행 순위 상세",
+    risk: "오늘 확인할 실행 리스크 상세",
+    urgent: "긴급 처리 현황 상세",
+  };
+  const sortedDepartments = kind === "completion"
+    ? sortByExecutionScore(departments)
+    : kind === "risk"
+      ? sortByRisk(departments)
+      : kind === "urgent"
+        ? [...departments].sort((left, right) => right.urgentCount + right.delayedCount - (left.urgentCount + left.delayedCount))
+        : sortByExecutionScore(departments);
+
+  const handleDepartmentSelect = (departmentId: string) => {
+    onClose();
+    onDepartmentSelect(departmentId);
+  };
+
+  const handleStatusSelect = (
+    departmentId: string,
+    status: DirectiveStatusValue | null,
+    urgent = false,
+  ) => {
+    onClose();
+    onStatusSelect(departmentId, status, urgent);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/45 px-3 py-5 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={titleMap[kind]}
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[30px] border border-white/80 bg-white shadow-[0_32px_90px_rgba(6,18,38,0.28)]"
+      >
+        <div className="flex min-w-0 items-start justify-between gap-4 border-b border-ink-100 px-5 py-5 sm:px-7">
+          <div className="min-w-0">
+            <p className="text-base font-bold text-brand-700">상세 분석</p>
+            <h2 className="mt-1 text-2xl font-bold text-ink-950 sm:text-3xl">{titleMap[kind]}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="management-clickable min-h-11 shrink-0 rounded-[16px] border border-ink-200 bg-white px-4 py-2 text-base font-bold text-ink-900 focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300"
+          >
+            닫기
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-7">
+          <div className="overflow-x-auto rounded-[22px] border border-ink-100">
+            <table className="min-w-[58rem] w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-ink-100 bg-ink-50 text-base font-bold text-ink-800">
+                  <th className="px-4 py-3">부서명</th>
+                  <th className="px-4 py-3">완료율</th>
+                  <th className="px-4 py-3">지연</th>
+                  <th className="px-4 py-3">긴급</th>
+                  <th className="px-4 py-3">승인 대기</th>
+                  <th className="px-4 py-3">이행 점수</th>
+                  <th className="px-4 py-3 text-right">보기</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {sortedDepartments.map((department) => (
+                  <tr key={department.departmentId} className="transition hover:bg-brand-50/55">
+                    <td className="px-4 py-4 text-lg font-bold text-ink-950">{department.departmentName}</td>
+                    <td className="px-4 py-4 text-base font-bold text-ink-900">{department.completionRate}%</td>
+                    <td className="px-4 py-4 text-base font-bold text-danger-700">{department.delayedCount}건</td>
+                    <td className="px-4 py-4 text-base font-bold text-danger-700">{department.urgentCount}건</td>
+                    <td className="px-4 py-4 text-base font-bold text-warning-700">{department.waitingApprovalCount}건</td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-3xl font-bold text-ink-950">{department.executionScore}</span>
+                        <span className={cn("rounded-full border px-3 py-1 text-sm font-bold", gradeClassName(department.executionGrade))}>
+                          {department.executionGrade}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <DepartmentActionButtons
+                        department={department}
+                        onDepartmentSelect={handleDepartmentSelect}
+                        onStatusSelect={handleStatusSelect}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -535,6 +705,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
   const [selectedStatus, setSelectedStatus] = useState<DirectiveStatusValue | null>(null);
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [page, setPage] = useState(1);
+  const [openAnalysisModal, setOpenAnalysisModal] = useState<AnalysisModalType | null>(null);
   const detailPanelRef = useRef<HTMLElement | null>(null);
 
   const selectedDepartment = useMemo(
@@ -711,7 +882,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
     }
 
     const timer = window.setTimeout(() => {
-      if (window.matchMedia("(max-width: 1023px)").matches) {
+      if (window.matchMedia("(max-width: 1279px)").matches) {
         detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }, 80);
@@ -771,20 +942,28 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
         </div>
       </section>
 
-      <section aria-label="부서 성과와 위험 신호" className={cn("space-y-5", shouldShowPanel && "lg:pr-[700px] xl:pr-[800px] 2xl:pr-[900px]")}>
-        <DepartmentExecutionRanking departments={data.departments} onSelect={selectDepartment} />
+      <section aria-label="부서 성과와 위험 신호" className={cn("space-y-5", shouldShowPanel && "xl:pr-[640px] 2xl:pr-[680px]")}>
+        <DepartmentExecutionRanking
+          departments={data.departments}
+          onOpenDetail={() => setOpenAnalysisModal("ranking")}
+        />
 
         <div className="grid gap-5 2xl:grid-cols-[1fr_1fr]">
           <div className="grid gap-5">
-            <DepartmentCompletionChart departments={data.departments} />
+            <DepartmentCompletionChart
+              departments={data.departments}
+              onOpenDetail={() => setOpenAnalysisModal("completion")}
+            />
             <DepartmentDelayChart departments={data.departments} />
           </div>
           <div className="grid gap-5">
-            <UrgentSummaryPanel departments={data.departments} />
+            <UrgentSummaryPanel
+              departments={data.departments}
+              onOpenDetail={() => setOpenAnalysisModal("urgent")}
+            />
             <RiskSignalPanel
               departments={data.departments}
-              onDepartmentSelect={selectDepartment}
-              onStatusSelect={selectDepartmentStatus}
+              onOpenDetail={() => setOpenAnalysisModal("risk")}
             />
           </div>
         </div>
@@ -792,7 +971,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
 
       <section
         aria-label="부서 현황"
-        className={cn("space-y-4", shouldShowPanel && "lg:pr-[700px] xl:pr-[800px] 2xl:pr-[900px]")}
+        className={cn("space-y-4", shouldShowPanel && "xl:pr-[640px] 2xl:pr-[680px]")}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -835,7 +1014,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
               <aside
                 ref={detailPanelRef}
                 aria-label="지시사항 확인창"
-                className="z-40 min-w-0 lg:fixed lg:right-6 lg:top-6 lg:bottom-6 lg:w-[660px] xl:w-[760px] 2xl:w-[860px]"
+                className="z-40 min-w-0 xl:fixed xl:right-6 xl:top-6 xl:bottom-6 xl:w-[600px] 2xl:w-[640px]"
               >
                 <DepartmentDirectivePanel
                   data={directivesData}
@@ -865,6 +1044,16 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
           </div>
         )}
       </section>
+
+      {openAnalysisModal ? (
+        <ExecutiveAnalysisModal
+          departments={data.departments}
+          kind={openAnalysisModal}
+          onClose={() => setOpenAnalysisModal(null)}
+          onDepartmentSelect={selectDepartment}
+          onStatusSelect={selectDepartmentStatus}
+        />
+      ) : null}
     </div>
   );
 }

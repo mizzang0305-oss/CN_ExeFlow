@@ -36,9 +36,9 @@ function statusClassName(status: string, isUrgent: boolean) {
 
 export function DirectiveList({ items }: DirectiveListProps) {
   return (
-    <div className="overflow-x-auto rounded-[22px] border border-ink-200 bg-white shadow-[0_14px_34px_rgba(6,18,38,0.06)]">
-      <div className="min-w-[64rem]">
-        <div className="hidden grid-cols-[8rem_4.5rem_minmax(22rem,1fr)_7rem_7.5rem_4.75rem_5.25rem] gap-2 border-b border-ink-100 bg-ink-50 px-3 py-2 text-[12px] font-bold text-ink-700 md:grid">
+    <div className="overflow-hidden rounded-[22px] border border-ink-200 bg-white shadow-[0_14px_34px_rgba(6,18,38,0.06)]">
+      <div className="min-w-0">
+        <div className="hidden grid-cols-[6.5rem_4rem_minmax(0,1fr)_4.75rem_5.5rem_3.75rem_4.25rem] gap-1.5 border-b border-ink-100 bg-ink-50 px-3 py-2 text-[12px] font-bold text-ink-700 md:grid">
           <span className="whitespace-nowrap">관리번호</span>
           <span className="whitespace-nowrap">상태</span>
           <span className="whitespace-nowrap">제목</span>
@@ -58,7 +58,7 @@ export function DirectiveList({ items }: DirectiveListProps) {
               <div
                 key={item.id}
                 className={cn(
-                  "grid min-h-12 gap-2 px-3 py-3 transition hover:bg-brand-50/70 md:grid-cols-[8rem_4.5rem_minmax(22rem,1fr)_7rem_7.5rem_4.75rem_5.25rem] md:items-center",
+                  "grid min-h-12 gap-2 px-3 py-3 transition hover:bg-brand-50/70 md:gap-1.5 md:grid-cols-[6.5rem_4rem_minmax(0,1fr)_4.75rem_5.5rem_3.75rem_4.25rem] md:items-center",
                   isRiskRow && "bg-danger-50/45",
                 )}
               >

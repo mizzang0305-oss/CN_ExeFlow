@@ -160,13 +160,13 @@ export default async function DepartmentBoardPage() {
       description="우리 부서 KPI, 담당자별 실행 현황, 완료 요청과 재진행 흐름을 한 번에 처리할 수 있게 정리했습니다."
     >
       <div className="space-y-6">
-        <section aria-label="부서장 요약" className="rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)] sm:p-6">
+        <section aria-label="부서장 요약" className="min-w-0 overflow-hidden break-words whitespace-normal rounded-[30px] border border-white/80 bg-white p-5 shadow-[0_18px_42px_rgba(6,18,38,0.08)] sm:p-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
+            <div className="min-w-0">
               <p className="text-base font-bold text-brand-700">오늘 처리할 지시</p>
               <h2 className="mt-1 text-3xl font-bold text-ink-950">{session.departmentName ?? "내 부서"} 실행 요약</h2>
             </div>
-            <p className="text-base font-semibold text-ink-700">내 부서 데이터만 표시합니다.</p>
+            <p className="line-clamp-2 text-base font-semibold text-ink-700">내 부서 데이터만 표시합니다.</p>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
@@ -181,9 +181,9 @@ export default async function DepartmentBoardPage() {
             ].map(([label, value, helper]) => (
               <div
                 key={String(label)}
-                className="rounded-[22px] border border-ink-100 bg-ink-50 px-4 py-4"
+                className="min-w-0 overflow-hidden break-words whitespace-normal rounded-[22px] border border-ink-100 bg-ink-50 px-4 py-4"
               >
-                <p className="text-base font-bold text-ink-800">{label}</p>
+                <p className="line-clamp-2 text-base font-bold text-ink-800">{label}</p>
                 <p className="mt-2 text-4xl font-bold text-ink-950">{value}</p>
                 <p className="mt-1 text-sm font-semibold text-ink-700">{helper}</p>
               </div>
