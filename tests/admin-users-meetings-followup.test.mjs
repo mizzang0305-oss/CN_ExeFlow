@@ -93,7 +93,8 @@ test("우측 확인창은 compact 리스트와 날짜순 정렬 조작을 제공
   assert.match(list, /긴급/);
   assert.match(list, /부서/);
   assert.match(list, /기준일/);
-  assert.match(list, /min-w-\[64rem\]/);
+  assert.match(list, /min-w-0/);
+  assert.match(list, /md:grid-cols-\[6\.5rem_4rem_minmax\(0,1fr\)_4\.75rem_5\.5rem_3\.75rem_4\.25rem\]/);
   assert.match(list, /truncate/);
   assert.doesNotMatch(list, /<article\b/);
 });
