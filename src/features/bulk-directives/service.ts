@@ -98,6 +98,50 @@ const DEPARTMENT_ALIASES = new Map<string, string>([
   ["각 리더", "전체"],
 ]);
 
+const REPORT_DEPARTMENT_ALIASES = new Map<string, string>([
+  ["전 부서", "전 부서"],
+  ["전부서", "전 부서"],
+  ["전체", "전 부서"],
+  ["주식회사 씨엔푸드", "전 부서"],
+  ["경영관리부", "경영관리센터"],
+  ["경영관리센터", "경영관리센터"],
+  ["경영지원센터", "경영관리센터"],
+  ["세무회계팀", "경영관리센터"],
+  ["자금팀", "경영관리센터"],
+  ["인사총무팀", "경영관리센터"],
+  ["시설관리팀", "경영관리센터"],
+  ["채권관리팀", "경영관리센터"],
+  ["운영점검 테스트부서", "경영관리센터"],
+  ["HACCP", "경영관리센터"],
+  ["기획영업부", "기획영업부"],
+  ["영업본부", "기획영업부"],
+  ["기획영업1팀", "기획영업부"],
+  ["기획영업2팀", "기획영업부"],
+  ["기획전략팀", "기획영업부"],
+  ["영업1팀", "기획영업부"],
+  ["영업2팀", "기획영업부"],
+  ["영업3팀", "기획영업부"],
+  ["신규개발팀", "기획영업부"],
+  ["구매물류부", "구매물류부"],
+  ["물류부", "구매물류부"],
+  ["물류팀", "구매물류부"],
+  ["물류경리팀", "구매물류부"],
+  ["공장총괄본부", "공장총괄본부"],
+  ["공장총괄", "공장총괄본부"],
+  ["생산부", "공장총괄본부"],
+  ["생산팀", "공장총괄본부"],
+  ["포장실", "공장총괄본부"],
+  ["가공장", "공장총괄본부"],
+  ["육가공", "공장총괄본부"],
+  ["육가공팀", "공장총괄본부"],
+  ["육가공물류", "공장총괄본부"],
+  ["햅썹운용팀", "공장총괄본부"],
+  ["인식당", "공장총괄본부"],
+  ["R&D", "공장총괄본부"],
+  ["각 부서장", "각 부서장"],
+  ["각 리더", "각 리더"],
+]);
+
 const URGENT_TRUE_VALUES = new Set(["1", "Y", "YES", "TRUE", "긴급", "예", "유", "O", "○"]);
 
 function assertBulkAdmin(session: AppSession) {
@@ -549,6 +593,18 @@ function normalizeDepartmentLabel(value: string) {
   return DEPARTMENT_ALIASES.get(trimmed) ?? trimmed;
 }
 
+function buildReportDepartmentLabel(rawValue: string) {
+  const labels = rawValue
+    .split(/\s*(?:,|\/|\\|\||ㆍ|·|，|、|;|；|\n|\r|\+|&)\s*/)
+    .map((label) => {
+      const trimmed = label.trim();
+      return REPORT_DEPARTMENT_ALIASES.get(trimmed) ?? trimmed;
+    })
+    .filter(Boolean);
+
+  return [...new Set(labels)].join(", ");
+}
+
 function resolveDepartments(
   rawValue: string,
   departments: BulkDirectiveDepartment[],
@@ -756,14 +812,19 @@ function validateAndNormalizeReplaceRow(
   const directiveText = getCellValue(rawData, "지시사항");
   const rawDepartments = getCellValue(rawData, "담당부서");
   const rawMeetingDate = getCellValue(rawData, "회의일");
-  const rawDeadlineLabel = getCellValue(rawData, "비고") || getCellValue(rawData, "기한");
+  const rawDueDate = getCellValue(rawData, "기한");
+  const rawNote = getCellValue(rawData, "비고");
   const sourceSheet = getCellValue(rawData, "원본시트");
   const meetingDate = toDateValue(rawMeetingDate, REPLACE_DEFAULT_DATE) ?? REPLACE_DEFAULT_DATE;
-  const dueDate = toDateValue(rawDeadlineLabel);
+  const dueDateFromDueColumn = rawDueDate ? toDateValue(rawDueDate) : null;
+  const dueDateFromNoteFallback = !rawDueDate && rawNote ? toDateValue(rawNote) : null;
+  const dueDate = dueDateFromDueColumn ?? dueDateFromNoteFallback;
+  const note = rawNote || rawDueDate || null;
   const rawStatus = getCellValue(rawData, "상태");
   const statusResult = normalizeStatus(rawStatus);
   const reportBucket = normalizeReportBucket(rawStatus);
   const departmentResult = resolveDepartments(rawDepartments, departments, { expandAllDepartment: false });
+  const reportDepartmentLabel = buildReportDepartmentLabel(rawDepartments);
   const chairRole = getCellValue(rawData, "주관") || null;
   const sourceNo = getCellValue(rawData, "No.") || null;
   const planned = buildPlannedDirectiveNumber(meetingDate, sequenceByYearMonth);
@@ -788,6 +849,10 @@ function validateAndNormalizeReplaceRow(
     errors.push("회의일 형식을 확인해주세요.");
   }
 
+  if (rawDueDate && !dueDateFromDueColumn) {
+    errors.push("기한 형식을 확인해주세요.");
+  }
+
   const title = normalizeTitle(directiveText || "지시사항 입력 필요");
   const contentParts = [
     directiveText,
@@ -797,10 +862,9 @@ function validateAndNormalizeReplaceRow(
     rawStatus ? `원본상태: ${rawStatus}` : null,
     `보고상태: ${reportBucket}`,
     rawDepartments ? `원본담당부서: ${rawDepartments}` : null,
-    departmentResult.departmentNames.length > 0
-      ? `보고담당부서: ${departmentResult.departmentNames.join(", ")}`
-      : null,
-    rawDeadlineLabel ? `기한/비고: ${rawDeadlineLabel}` : null,
+    reportDepartmentLabel ? `보고담당부서: ${reportDepartmentLabel}` : null,
+    rawDueDate ? `기한: ${rawDueDate}` : null,
+    rawNote ? `비고: ${rawNote}` : null,
   ].filter(Boolean);
   const normalizedData: BulkDirectiveNormalizedData | null =
     errors.length === 0
@@ -813,7 +877,7 @@ function validateAndNormalizeReplaceRow(
           dueDate,
           isUrgent: false,
           meetingDate,
-          note: rawDeadlineLabel || null,
+          note,
           sequence: planned.sequence,
           sourceNo,
           status: statusResult.status,
@@ -837,7 +901,7 @@ function validateAndNormalizeReplaceRow(
     errors,
     isUrgent: false,
     meetingDate,
-    note: rawDeadlineLabel || null,
+    note,
     rowNumber: parsedRow.rowNumber,
     status: statusResult.status,
     statusLabel: BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL[statusResult.status],

@@ -162,7 +162,7 @@ function readContentLabel(content: string | null | undefined, label: string) {
 
 export function extractCeoReportMetadata(content: string | null | undefined) {
   const reportBucket = readContentLabel(content, "보고상태") ?? readContentLabel(content, "원본상태");
-  const departmentText = readContentLabel(content, "보고담당부서") ?? readContentLabel(content, "원본담당부서");
+  const departmentText = readContentLabel(content, "원본담당부서") ?? readContentLabel(content, "보고담당부서");
   const sourceLabel = readContentLabel(content, "주관");
 
   return {
