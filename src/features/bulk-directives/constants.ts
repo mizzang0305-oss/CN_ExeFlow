@@ -22,6 +22,10 @@ export const BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS = [
   "지시사항",
   "담당부서",
   "상태",
+] as const;
+
+export const BULK_DIRECTIVE_REPLACE_NOTE_COLUMNS = [
+  "비고",
   "기한",
 ] as const;
 

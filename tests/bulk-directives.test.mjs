@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
+
+import ts from "typescript";
 
 const root = process.cwd();
+const require = createRequire(import.meta.url);
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -12,6 +17,142 @@ function read(relativePath) {
 function exists(relativePath) {
   return fs.existsSync(path.join(root, relativePath));
 }
+
+function loadBulkDirectiveServiceForTest() {
+  const sourcePath = path.join(root, "src/features/bulk-directives/service.ts");
+  const source = fs
+    .readFileSync(sourcePath, "utf8")
+    .replace(
+      "function validateAndNormalizeReplaceRow(",
+      "export function validateAndNormalizeReplaceRow(",
+    );
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: sourcePath,
+  }).outputText;
+  const cjsModule = { exports: {} };
+  const sandbox = {
+    Buffer,
+    console,
+    crypto,
+    exports: cjsModule.exports,
+    module: cjsModule,
+    process,
+    require: (specifier) => {
+      if (specifier === "./constants") {
+        return {
+          BULK_DIRECTIVE_ALLOWED_DEPARTMENTS: [
+            "전체",
+            "경영관리센터",
+            "영업본부",
+            "구매물류부",
+            "공장총괄본부",
+          ],
+          BULK_DIRECTIVE_REPLACE_NOTE_COLUMNS: ["비고", "기한"],
+          BULK_DIRECTIVE_REQUIRED_COLUMNS: [
+            "회의일",
+            "주관",
+            "지시사항",
+            "담당부서",
+            "상태",
+            "긴급여부",
+            "긴급등급",
+            "마감일",
+            "비고",
+          ],
+          BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS: [
+            "No.",
+            "회의일",
+            "주관",
+            "지시사항",
+            "담당부서",
+            "상태",
+          ],
+          BULK_DIRECTIVE_STATUS_LABEL_TO_VALUE: {
+            대기: "NEW",
+            신규: "NEW",
+            진행중: "IN_PROGRESS",
+            지속: "IN_PROGRESS",
+            완료: "COMPLETED",
+            반려: "REJECTED",
+            승인대기: "COMPLETION_REQUESTED",
+            "승인 대기": "COMPLETION_REQUESTED",
+            완료요청: "COMPLETION_REQUESTED",
+            "완료 요청": "COMPLETION_REQUESTED",
+            지연: "DELAYED",
+          },
+          BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL: {
+            COMPLETED: "완료",
+            COMPLETION_REQUESTED: "승인 대기",
+            DELAYED: "지연",
+            IN_PROGRESS: "진행중",
+            NEW: "대기",
+            REJECTED: "반려",
+          },
+        };
+      }
+
+      if (specifier === "@/features/auth/utils") {
+        return { isAdminRole: () => true };
+      }
+
+      if (specifier === "@/lib/errors") {
+        return {
+          ApiError: class ApiError extends Error {
+            constructor(status, message, cause, code) {
+              super(message);
+              this.status = status;
+              this.cause = cause;
+              this.code = code;
+            }
+          },
+        };
+      }
+
+      if (specifier === "@/lib/history") {
+        return { recordHistory: async () => undefined };
+      }
+
+      if (specifier === "@/lib/supabase") {
+        return { createSupabaseServerClient: () => ({}) };
+      }
+
+      return require(specifier);
+    },
+  };
+
+  vm.runInNewContext(compiled, sandbox, { filename: sourcePath });
+  return cjsModule.exports;
+}
+
+function buildReplaceRow(overrides = {}) {
+  return {
+    rowNumber: 2,
+    values: {
+      "No.": "1",
+      "회의일": "2026-05-08",
+      "주관": "대표",
+      "지시사항": "테스트 지시사항",
+      "담당부서": "기획영업부",
+      "상태": "진행중",
+      "기한": "",
+      "비고": "",
+      "원본시트": "대표이사 지시사항",
+      ...overrides,
+    },
+  };
+}
+
+const replaceDepartments = [
+  { code: "ALL", headUserId: null, id: "dept-all", name: "전체" },
+  { code: "SALES_HQ", headUserId: null, id: "dept-sales", name: "영업본부" },
+  { code: "MANAGEMENT_CENTER", headUserId: null, id: "dept-management", name: "경영관리센터" },
+  { code: "PURCHASE_LOGISTICS", headUserId: null, id: "dept-purchase", name: "구매물류부" },
+  { code: "FACTORY_HQ", headUserId: null, id: "dept-factory", name: "공장총괄본부" },
+];
 
 test("데이터 일괄관리 메뉴와 접근 제어는 대표와 슈퍼관리자 기준으로 제공된다", () => {
   const appFrame = read("src/components/app/app-frame.tsx");
@@ -150,9 +291,11 @@ test("지시사항 전체 교체 API와 운영 안전장치가 제공된다", ()
   assert.match(schemas, /confirmText/);
   assert.match(schemas, /전체교체/);
   assert.match(service, /DIRECTIVE_REPLACE/);
+  assert.match(service, /DIRECTIVE_REPLACE_SOURCE_SHEET_NAMES/);
+  assert.match(service, /대표이사 지시사항/);
+  assert.match(service, /부사장 지시사항/);
+  assert.match(service, /DIRECTIVE_REPLACE_VALIDATION_SHEET_NAME/);
   assert.match(service, /통합 지시사항/);
-  assert.doesNotMatch(service, /대표이사 지시사항["']/);
-  assert.doesNotMatch(service, /부사장 지시사항["']/);
   assert.match(service, /is_archived:\s*true/);
   assert.match(service, /OLD-\$\{directive\.directive_no\}/);
   assert.match(service, /엑셀 재등록 전 기존 지시사항 전체 비노출/);
@@ -161,11 +304,12 @@ test("지시사항 전체 교체 API와 운영 안전장치가 제공된다", ()
   assert.doesNotMatch(registerRoute, /\.delete\(/);
 });
 
-test("엑셀 전체 교체는 통합 시트의 부서와 상태를 운영 기준으로 매핑한다", () => {
+test("엑셀 전체 교체는 원본 시트의 부서와 상태를 운영·보고 기준으로 매핑한다", () => {
   const constants = read("src/features/bulk-directives/constants.ts");
   const service = read("src/features/bulk-directives/service.ts");
 
   assert.match(constants, /BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS/);
+  assert.match(constants, /BULK_DIRECTIVE_REPLACE_NOTE_COLUMNS/);
   assert.match(constants, /No\./);
   assert.match(constants, /기한/);
   assert.match(constants, /지속:\s*"IN_PROGRESS"/);
@@ -175,8 +319,72 @@ test("엑셀 전체 교체는 통합 시트의 부서와 상태를 운영 기준
   assert.match(service, /구매물류부["'],\s*["']구매물류부/);
   assert.match(service, /전 부서["'],\s*["']전체/);
   assert.match(service, /주식회사 씨엔푸드["'],\s*["']전체/);
-  assert.match(service, /HACCP["'],\s*["']공장총괄본부/);
+  assert.match(service, /HACCP["'],\s*["']경영관리센터/);
+  assert.doesNotMatch(service, /HACCP["'],\s*["']공장총괄본부/);
+  assert.match(service, /보고상태/);
+  assert.match(service, /보고담당부서/);
+  assert.match(service, /buildReportDepartmentLabel/);
+  assert.match(service, /expandAllDepartment:\s*false/);
+  assert.match(service, /targetScope:\s*"SELECTED"/);
   assert.match(service, /resolveDepartments/);
+});
+
+test("엑셀 전체 교체는 기한을 비고보다 먼저 due_date로 파싱한다", () => {
+  const { validateAndNormalizeReplaceRow } = loadBulkDirectiveServiceForTest();
+
+  const withDueDateAndNote = validateAndNormalizeReplaceRow(
+    buildReplaceRow({
+      "기한": "2026-05-20",
+      "비고": "별도 보고",
+    }),
+    replaceDepartments,
+    new Map(),
+  );
+
+  assert.equal(withDueDateAndNote.valid, true);
+  assert.equal(withDueDateAndNote.dueDate, "2026-05-20");
+  assert.equal(withDueDateAndNote.note, "별도 보고");
+  assert.match(withDueDateAndNote.content, /기한: 2026-05-20/);
+  assert.match(withDueDateAndNote.content, /비고: 별도 보고/);
+
+  const invalidExplicitDueDate = validateAndNormalizeReplaceRow(
+    buildReplaceRow({
+      "기한": "invalid-date",
+      "비고": "2026-05-20",
+    }),
+    replaceDepartments,
+    new Map(),
+  );
+
+  assert.equal(invalidExplicitDueDate.valid, false);
+  assert.equal(invalidExplicitDueDate.dueDate, null);
+  assert.match(invalidExplicitDueDate.errors.join("\n"), /기한 형식을 확인해주세요/);
+
+  const noteOnly = validateAndNormalizeReplaceRow(
+    buildReplaceRow({
+      "비고": "별도 보고",
+    }),
+    replaceDepartments,
+    new Map(),
+  );
+
+  assert.equal(noteOnly.valid, true);
+  assert.equal(noteOnly.dueDate, null);
+  assert.equal(noteOnly.note, "별도 보고");
+  assert.match(noteOnly.content, /비고: 별도 보고/);
+
+  const noteDateFallback = validateAndNormalizeReplaceRow(
+    buildReplaceRow({
+      "비고": "2026-05-20",
+    }),
+    replaceDepartments,
+    new Map(),
+  );
+
+  assert.equal(noteDateFallback.valid, true);
+  assert.equal(noteDateFallback.dueDate, "2026-05-20");
+  assert.equal(noteDateFallback.note, "2026-05-20");
+  assert.match(noteDateFallback.content, /비고: 2026-05-20/);
 });
 
 test("지시사항 전체 교체 UI는 미리보기와 확인 문구를 거친다", () => {
