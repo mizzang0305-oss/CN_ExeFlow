@@ -15,6 +15,7 @@ import { getReportsOverview } from "@/features/reports";
 import { ApiError } from "@/lib/errors";
 import { createSupabaseServerClient } from "@/lib/supabase";
 
+import { buildCeoReportSummary, type CeoReportInputItem } from "./ceo-report";
 import type {
   CeoDashboardData,
   DashboardQueueItem,
@@ -49,6 +50,17 @@ type AttachmentCountRow = {
 type DepartmentNameRow = {
   id: string;
   name: string;
+};
+
+type CeoReportDirectiveRow = {
+  content: string;
+  id: string;
+  status: string;
+};
+
+type CeoReportDepartmentAssignmentRow = {
+  department_id: string;
+  directive_id: string;
 };
 
 function isActiveDirective(item: DirectiveListItem) {
@@ -268,6 +280,80 @@ function buildWeeklyTrend(recentReports: Awaited<ReturnType<typeof getReportsOve
     }));
 }
 
+async function loadCeoReportSummary() {
+  const client = createSupabaseServerClient();
+  const { data: directives, error: directivesError } = await client
+    .from("directives")
+    .select("id, content, status")
+    .eq("is_archived", false);
+
+  if (directivesError) {
+    throw new ApiError(500, "대표 보고용 지시사항을 불러오지 못했습니다.", directivesError, "CEO_REPORT_DIRECTIVES_FAILED");
+  }
+
+  const directiveRows = (directives ?? []) as CeoReportDirectiveRow[];
+  const directiveIds = directiveRows.map((directive) => directive.id);
+  const assignmentsByDirective = new Map<string, CeoReportInputItem["assignedDepartments"]>();
+
+  if (directiveIds.length > 0) {
+    const { data: assignments, error: assignmentsError } = await client
+      .from("directive_departments")
+      .select("directive_id, department_id")
+      .in("directive_id", directiveIds);
+
+    if (assignmentsError) {
+      throw new ApiError(
+        500,
+        "대표 보고용 담당부서 배정을 불러오지 못했습니다.",
+        assignmentsError,
+        "CEO_REPORT_ASSIGNMENTS_FAILED",
+      );
+    }
+
+    const assignmentRows = (assignments ?? []) as CeoReportDepartmentAssignmentRow[];
+    const departmentIds = [...new Set(assignmentRows.map((assignment) => assignment.department_id))];
+    const departmentNameById = new Map<string, string | null>();
+
+    if (departmentIds.length > 0) {
+      const { data: departments, error: departmentsError } = await client
+        .from("departments")
+        .select("id, name")
+        .in("id", departmentIds);
+
+      if (departmentsError) {
+        throw new ApiError(
+          500,
+          "대표 보고용 담당부서 이름을 불러오지 못했습니다.",
+          departmentsError,
+          "CEO_REPORT_DEPARTMENTS_FAILED",
+        );
+      }
+
+      for (const department of (departments ?? []) as DepartmentNameRow[]) {
+        departmentNameById.set(department.id, department.name);
+      }
+    }
+
+    for (const assignment of assignmentRows) {
+      const current = assignmentsByDirective.get(assignment.directive_id) ?? [];
+      assignmentsByDirective.set(assignment.directive_id, [
+        ...current,
+        {
+          departmentName: departmentNameById.get(assignment.department_id) ?? null,
+        },
+      ]);
+    }
+  }
+
+  return buildCeoReportSummary(
+    directiveRows.map((directive) => ({
+      assignedDepartments: assignmentsByDirective.get(directive.id) ?? [],
+      content: directive.content,
+      status: directive.status,
+    })),
+  );
+}
+
 const loadCachedReportsOverview = unstable_cache(
   async (session: AppSession) => getReportsOverview(session),
   ["dashboard-reports-overview"],
@@ -281,10 +367,11 @@ export async function getCeoDashboardData(session: AppSession): Promise<CeoDashb
     throw new ApiError(403, "대표 대시보드는 대표와 슈퍼 관리자만 조회할 수 있습니다.", null, "CEO_DASHBOARD_DENIED");
   }
 
-  const [dashboard, approvalQueue, reportsOverview] = await Promise.all([
+  const [dashboard, approvalQueue, reportsOverview, ceoReport] = await Promise.all([
     getDashboardData(session),
     getDirectiveApprovalQueueForSession(session),
     loadCachedReportsOverview(session),
+    loadCeoReportSummary(),
   ]);
 
   const dueTodayItems = sortByDueDate(dashboard.items.filter(isDueToday)).slice(0, 6);
@@ -342,6 +429,7 @@ export async function getCeoDashboardData(session: AppSession): Promise<CeoDashb
       subtitle: `${item.requestDepartmentName ?? "부서 미지정"} · 로그 ${item.logCount}건 · 증빙 ${item.attachmentCount}건`,
       title: item.title,
     })),
+    ceoReport,
     checkTodayQueue: dueTodayItems.map((item) =>
       buildDirectiveQueueItem(item, {
         badgeText: "오늘 확인",

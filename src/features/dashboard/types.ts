@@ -5,6 +5,7 @@ import type {
   DirectiveListItem,
   WeeklyReportSummary,
 } from "@/features/directives/types";
+import type { CeoReportSummary } from "./ceo-report";
 
 export type DashboardCardTone = "danger" | "default" | "success" | "warning";
 
@@ -67,6 +68,7 @@ export interface WeeklyTrendPoint {
 export interface CeoDashboardData {
   actionCards: DashboardActionCard[];
   approveNowQueue: DashboardQueueItem[];
+  ceoReport: CeoReportSummary;
   checkTodayQueue: DashboardQueueItem[];
   departments: DepartmentAnalysisItem[];
   executiveSummary: CeoExecutiveSummary;

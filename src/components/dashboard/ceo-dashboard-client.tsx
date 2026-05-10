@@ -41,6 +41,165 @@ const analysisActionClassName =
 const dangerActionClassName =
   "management-clickable inline-flex min-h-11 items-center justify-center rounded-[16px] border border-danger-200 bg-danger-50 px-4 py-2 text-base font-bold text-danger-700 shadow-[0_10px_24px_rgba(220,38,38,0.08)] transition hover:border-danger-300 hover:bg-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-danger-200 active:translate-y-[1px]";
 
+function getReportBlockCount(rate: number) {
+  return Math.max(0, Math.min(10, Math.round(rate / 10)));
+}
+
+function ReportRateBlocks({ rate }: { rate: number }) {
+  const filledBlocks = getReportBlockCount(rate);
+
+  return (
+    <div className="flex shrink-0 gap-[5px]" aria-label={`이행률 ${rate}%`}>
+      {Array.from({ length: 10 }).map((_, index) => (
+        <span
+          key={index}
+          aria-hidden="true"
+          className={cn(
+            "h-4 w-3.5 rounded-[1px] sm:w-4 lg:w-5",
+            index < filledBlocks ? "bg-[#2F6F2A]" : "bg-[#D5DEE8]",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
+  const kpis = [
+    {
+      className: "bg-[#FFF1E7]",
+      label: "진행 중",
+      numberClassName: "text-[#D26A1E]",
+      value: report.total.inProgressCount,
+    },
+    {
+      className: "bg-[#E9F2E2]",
+      label: "완료",
+      numberClassName: "text-[#2F6F2A]",
+      value: report.total.completedCount,
+    },
+    {
+      className: "bg-[#ECE7F0]",
+      label: "지속",
+      numberClassName: "text-[#6A51AA]",
+      value: report.total.continuingCount,
+    },
+  ];
+
+  return (
+    <section
+      aria-label="지시사항 이행 현황 보고"
+      className="bg-white px-4 py-4 text-[#1F2F45] sm:px-6 sm:py-6"
+    >
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex min-h-[4.4rem] w-full items-center rounded-[3px] bg-[#3F6090] px-5 py-3 text-white md:w-[72%] lg:min-h-[4rem] lg:px-7">
+          <h2 className="text-2xl font-black leading-tight sm:text-3xl lg:text-[2rem]">지시사항 이행 현황 보고</h2>
+        </div>
+        <div className="flex flex-col justify-start text-left md:min-w-[14rem] md:pt-0.5 md:text-right">
+          <p className="text-base font-black text-[#52657D] sm:text-lg">{report.meetingLabel}</p>
+          <p className="mt-1 text-base font-black text-[#3F6090] sm:text-xl">{report.reportDateLabel}</p>
+        </div>
+      </div>
+
+      <div className="mt-7 bg-[#3F6090] px-4 py-3.5 text-center text-xl font-black text-white sm:text-2xl">
+        총 지시사항 {report.total.totalCount} 건
+      </div>
+
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className={cn("min-h-[9.5rem] px-5 py-6 text-center lg:min-h-[10rem]", kpi.className)}>
+            <p className="text-lg font-black text-[#1F2F45] sm:text-xl">{kpi.label}</p>
+            <p className={cn("mt-4 text-5xl font-black leading-none sm:text-6xl", kpi.numberClassName)}>
+              {kpi.value}
+              <span className="ml-2 text-3xl font-black">건</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8">
+        <div className="hidden overflow-hidden md:block">
+          <table className="w-full table-fixed border-collapse text-left">
+            <thead className="bg-[#E7EDF5] text-base font-black text-[#1F2F45]">
+              <tr>
+                <th className="w-[21%] px-4 py-3.5 text-center">담당 부서</th>
+                <th className="w-[12%] px-3 py-3.5 text-center">총 건수</th>
+                <th className="w-[10%] px-3 py-3.5 text-center text-[#D26A1E]">진행중</th>
+                <th className="w-[10%] px-3 py-3.5 text-center text-[#2F6F2A]">완료</th>
+                <th className="w-[10%] px-3 py-3.5 text-center text-[#6A51AA]">지속</th>
+                <th className="w-[37%] px-4 py-3.5 text-center">이행률</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#D5DEE8] text-lg font-black">
+              {report.departmentSummary.map((department) => (
+                <tr key={department.departmentName} className="bg-white">
+                  <td className="px-4 py-3 text-center">{department.departmentName}</td>
+                  <td className="px-3 py-3 text-center">{department.totalCount} 건</td>
+                  <td className="px-3 py-3 text-center text-[#D26A1E]">{department.inProgressCount} 건</td>
+                  <td className="px-3 py-3 text-center text-[#2F6F2A]">{department.completedCount} 건</td>
+                  <td className="px-3 py-3 text-center text-[#6A51AA]">{department.continuingCount} 건</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-between gap-6">
+                      <ReportRateBlocks rate={department.completionRate} />
+                      <span className="w-14 shrink-0 text-right text-[#2F6F2A]">{department.completionRate}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="grid gap-3 md:hidden">
+          {report.departmentSummary.map((department) => (
+            <div key={department.departmentName} className="border border-[#D5DEE8] bg-white px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="text-lg font-black">{department.departmentName}</h3>
+                <span className="shrink-0 text-lg font-black text-[#2F6F2A]">{department.completionRate}%</span>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2 text-center text-sm font-black">
+                <div className="bg-[#E7EDF5] px-2 py-2">총 {department.totalCount}건</div>
+                <div className="bg-[#FFF1E7] px-2 py-2 text-[#D26A1E]">진행 {department.inProgressCount}</div>
+                <div className="bg-[#E9F2E2] px-2 py-2 text-[#2F6F2A]">완료 {department.completedCount}</div>
+                <div className="bg-[#ECE7F0] px-2 py-2 text-[#6A51AA]">지속 {department.continuingCount}</div>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <ReportRateBlocks rate={department.completionRate} />
+                <span className="text-base font-black text-[#2F6F2A]">{department.completionRate}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 divide-y divide-white text-base font-black sm:text-lg">
+          {report.sourceSummary.map((source, index) => (
+            <div
+              key={source.sourceLabel}
+              className={cn(
+                "grid gap-3 px-4 py-2.5 md:grid-cols-[20rem_minmax(0,1fr)] md:items-center",
+                index === 0 ? "bg-[#E7EDF5]" : "bg-[#F4EFE7]",
+              )}
+            >
+              <p className="text-center md:text-left md:pl-20">{source.sourceLabel}</p>
+              <p className="flex flex-wrap items-center justify-center gap-x-7 gap-y-1 md:justify-end">
+                <span>총 {source.totalCount} 건</span>
+                <span className="text-[#D26A1E]">진행중 {source.inProgressCount}</span>
+                <span className="text-[#2F6F2A]">완료 {source.completedCount}</span>
+                <span className="text-[#6A51AA]">지속 {source.continuingCount}</span>
+                <span className="text-[#3F6090]">이행률 {source.completionRate}%</span>
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-1 text-right text-sm font-bold text-[#52657D]">
+          ※ 이행률 = (완료 + 지속) / 총 건수 | 담당부서 복수 지정 건은 각 부서에 중복 반영
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function buildSummaryCards(data: CeoDashboardData): SummaryCard[] {
   const summary = data.executiveSummary;
 
@@ -898,7 +1057,11 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
         </div>
       ) : null}
 
-      <section aria-label="경영 요약" className="space-y-4">
+      <div className={cn(shouldShowPanel && "xl:pr-[640px] 2xl:pr-[680px]")}>
+        <CeoReportPanel report={data.ceoReport} />
+      </div>
+
+      <section aria-label="경영 요약" className={cn("space-y-4", shouldShowPanel && "xl:pr-[640px] 2xl:pr-[680px]")}>
         <div>
           <p className="text-base font-bold text-brand-700">경영 요약</p>
           <h1 className="mt-1 text-3xl font-bold text-ink-950">대표 대시보드</h1>

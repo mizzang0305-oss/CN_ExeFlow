@@ -11,6 +11,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 
 import {
   BULK_DIRECTIVE_ALLOWED_DEPARTMENTS,
+  BULK_DIRECTIVE_REPLACE_NOTE_COLUMNS,
   BULK_DIRECTIVE_REQUIRED_COLUMNS,
   BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS,
   BULK_DIRECTIVE_STATUS_LABEL_TO_VALUE,
@@ -42,7 +43,8 @@ type ZipEntry = {
 
 const DIRECTIVE_BATCH_TYPE = "DIRECTIVE";
 const DIRECTIVE_REPLACE_BATCH_TYPE = "DIRECTIVE_REPLACE";
-const DIRECTIVE_REPLACE_SHEET_NAME = "통합 지시사항";
+const DIRECTIVE_REPLACE_SOURCE_SHEET_NAMES = ["대표이사 지시사항", "부사장 지시사항"] as const;
+const DIRECTIVE_REPLACE_VALIDATION_SHEET_NAME = "통합 지시사항";
 const DIRECTIVE_REPLACE_CONFIRM_TEXT = "전체교체";
 const DIRECTIVE_REPLACE_ARCHIVE_REASON = "엑셀 재등록 전 기존 지시사항 전체 비노출";
 const MAX_DIRECTIVE_NO_RETRIES = 8;
@@ -88,10 +90,12 @@ const DEPARTMENT_ALIASES = new Map<string, string>([
   ["육가공", "공장총괄본부"],
   ["육가공팀", "공장총괄본부"],
   ["육가공물류", "공장총괄본부"],
-  ["HACCP", "공장총괄본부"],
+  ["HACCP", "경영관리센터"],
   ["햅썹운용팀", "공장총괄본부"],
   ["인식당", "공장총괄본부"],
   ["R&D", "공장총괄본부"],
+  ["각 부서장", "전체"],
+  ["각 리더", "전체"],
 ]);
 
 const URGENT_TRUE_VALUES = new Set(["1", "Y", "YES", "TRUE", "긴급", "예", "유", "O", "○"]);
@@ -487,6 +491,29 @@ async function parseSpreadsheetFile(file: File, options?: { sheetName?: string }
   throw new ApiError(400, "엑셀 또는 CSV 파일만 업로드할 수 있습니다.", null, "BULK_FILE_TYPE_INVALID");
 }
 
+async function parseReplaceSpreadsheetFile(file: File) {
+  const fileName = file.name.toLowerCase();
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (fileName.endsWith(".csv") || file.type.includes("csv")) {
+    return parseCsvText(buffer.toString("utf8"));
+  }
+
+  if (fileName.endsWith(".xlsx") || file.type.includes("spreadsheetml")) {
+    return DIRECTIVE_REPLACE_SOURCE_SHEET_NAMES.flatMap((sheetName, sheetIndex) =>
+      parseXlsxBuffer(buffer, { sheetName }).map((row) => ({
+        rowNumber: sheetIndex * 1000 + row.rowNumber,
+        values: {
+          ...row.values,
+          원본시트: sheetName,
+        },
+      })),
+    );
+  }
+
+  throw new ApiError(400, "엑셀 또는 CSV 파일만 업로드할 수 있습니다.", null, "BULK_REPLACE_FILE_TYPE_INVALID");
+}
+
 function normalizeUrgentValue(value: string) {
   return URGENT_TRUE_VALUES.has(value.trim().toUpperCase());
 }
@@ -522,8 +549,13 @@ function normalizeDepartmentLabel(value: string) {
   return DEPARTMENT_ALIASES.get(trimmed) ?? trimmed;
 }
 
-function resolveDepartments(rawValue: string, departments: BulkDirectiveDepartment[]) {
+function resolveDepartments(
+  rawValue: string,
+  departments: BulkDirectiveDepartment[],
+  options: { expandAllDepartment?: boolean } = {},
+) {
   const errors: string[] = [];
+  const expandAllDepartment = options.expandAllDepartment ?? true;
   const labels = rawValue
     .split(/\s*(?:,|\/|\\|\||ㆍ|·|，|、|;|；|\n|\r|\+|&)\s*/)
     .map(normalizeDepartmentLabel)
@@ -540,7 +572,7 @@ function resolveDepartments(rawValue: string, departments: BulkDirectiveDepartme
   const uniqueLabels = [...new Set(labels)];
   const includesAll = uniqueLabels.includes("전체");
 
-  if (includesAll) {
+  if (includesAll && expandAllDepartment) {
     return {
       departmentIds: departments.map((department) => department.id),
       departmentNames: ["전체"],
@@ -598,6 +630,16 @@ function normalizeStatus(rawValue: string) {
     errors: [] as string[],
     status,
   };
+}
+
+function normalizeReportBucket(rawValue: string) {
+  const trimmed = rawValue.trim();
+
+  if (trimmed === "완료" || trimmed === "지속" || trimmed === "진행중") {
+    return trimmed;
+  }
+
+  return trimmed ? BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL[normalizeStatus(trimmed).status] : "진행중";
 }
 
 function normalizeTitle(value: string) {
@@ -714,16 +756,23 @@ function validateAndNormalizeReplaceRow(
   const directiveText = getCellValue(rawData, "지시사항");
   const rawDepartments = getCellValue(rawData, "담당부서");
   const rawMeetingDate = getCellValue(rawData, "회의일");
-  const rawDueDate = getCellValue(rawData, "기한");
+  const rawDeadlineLabel = getCellValue(rawData, "비고") || getCellValue(rawData, "기한");
+  const sourceSheet = getCellValue(rawData, "원본시트");
   const meetingDate = toDateValue(rawMeetingDate, REPLACE_DEFAULT_DATE) ?? REPLACE_DEFAULT_DATE;
-  const dueDate = toDateValue(rawDueDate);
-  const statusResult = normalizeStatus(getCellValue(rawData, "상태"));
-  const departmentResult = resolveDepartments(rawDepartments, departments);
+  const dueDate = toDateValue(rawDeadlineLabel);
+  const rawStatus = getCellValue(rawData, "상태");
+  const statusResult = normalizeStatus(rawStatus);
+  const reportBucket = normalizeReportBucket(rawStatus);
+  const departmentResult = resolveDepartments(rawDepartments, departments, { expandAllDepartment: false });
   const chairRole = getCellValue(rawData, "주관") || null;
   const sourceNo = getCellValue(rawData, "No.") || null;
   const planned = buildPlannedDirectiveNumber(meetingDate, sequenceByYearMonth);
 
   errors.push(...statusResult.errors, ...departmentResult.errors);
+
+  if (!BULK_DIRECTIVE_REPLACE_NOTE_COLUMNS.some((column) => column in rawData)) {
+    warnings.push("기한/비고 컬럼이 없어 기한 원문 없이 등록됩니다.");
+  }
 
   if (!directiveText) {
     errors.push("지시사항을 입력해주세요.");
@@ -739,15 +788,19 @@ function validateAndNormalizeReplaceRow(
     errors.push("회의일 형식을 확인해주세요.");
   }
 
-  if (rawDueDate && !dueDate) {
-    errors.push("기한 형식을 확인해주세요.");
-  }
-
   const title = normalizeTitle(directiveText || "지시사항 입력 필요");
   const contentParts = [
     directiveText,
     chairRole ? `주관: ${chairRole}` : null,
     sourceNo ? `엑셀 No.: ${sourceNo}` : null,
+    sourceSheet ? `원본시트: ${sourceSheet}` : null,
+    rawStatus ? `원본상태: ${rawStatus}` : null,
+    `보고상태: ${reportBucket}`,
+    rawDepartments ? `원본담당부서: ${rawDepartments}` : null,
+    departmentResult.departmentNames.length > 0
+      ? `보고담당부서: ${departmentResult.departmentNames.join(", ")}`
+      : null,
+    rawDeadlineLabel ? `기한/비고: ${rawDeadlineLabel}` : null,
   ].filter(Boolean);
   const normalizedData: BulkDirectiveNormalizedData | null =
     errors.length === 0
@@ -760,12 +813,12 @@ function validateAndNormalizeReplaceRow(
           dueDate,
           isUrgent: false,
           meetingDate,
-          note: null,
+          note: rawDeadlineLabel || null,
           sequence: planned.sequence,
           sourceNo,
           status: statusResult.status,
           statusLabel: BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL[statusResult.status],
-          targetScope: departmentResult.departmentNames.includes("전체") ? "ALL" : "SELECTED",
+          targetScope: "SELECTED",
           title,
           urgentLevel: null,
           warnings,
@@ -784,7 +837,7 @@ function validateAndNormalizeReplaceRow(
     errors,
     isUrgent: false,
     meetingDate,
-    note: null,
+    note: rawDeadlineLabel || null,
     rowNumber: parsedRow.rowNumber,
     status: statusResult.status,
     statusLabel: BULK_DIRECTIVE_STATUS_VALUE_TO_LABEL[statusResult.status],
@@ -1049,7 +1102,7 @@ export async function previewReplaceDirectivesAsSession(
 
   const client = createSupabaseServerClient();
   const departments = await loadBulkDepartments(client);
-  const parsedRows = await parseSpreadsheetFile(file, { sheetName: DIRECTIVE_REPLACE_SHEET_NAME });
+  const parsedRows = await parseReplaceSpreadsheetFile(file);
   const sequenceByYearMonth = new Map<string, number>();
   const previewRows = parsedRows.map((row) => validateAndNormalizeReplaceRow(row, departments, sequenceByYearMonth));
   const validRows = previewRows.filter((row) => row.valid).length;
@@ -1108,7 +1161,8 @@ export async function previewReplaceDirectivesAsSession(
       activeDirectivesCount,
       fileName: file.name,
       invalidRows,
-      sheetName: DIRECTIVE_REPLACE_SHEET_NAME,
+      sourceSheetNames: [...DIRECTIVE_REPLACE_SOURCE_SHEET_NAMES],
+      validationSheetName: DIRECTIVE_REPLACE_VALIDATION_SHEET_NAME,
       totalRows: previewRows.length,
       validRows,
     },
@@ -1233,11 +1287,9 @@ function findAllDepartmentId(departments: BulkDirectiveDepartment[]) {
 
 function buildReplaceTargetDepartmentIds(normalized: BulkDirectiveNormalizedData, departments: BulkDirectiveDepartment[]) {
   const activeDepartmentIds = new Set(departments.map((department) => department.id));
-  const allDepartmentId = findAllDepartmentId(departments);
   const selectedIds = [...new Set(normalized.departmentIds)].filter((departmentId) => activeDepartmentIds.has(departmentId));
-  const targetDepartmentIds = allDepartmentId ? [allDepartmentId, ...selectedIds.filter((departmentId) => departmentId !== allDepartmentId)] : selectedIds;
 
-  return [...new Set(targetDepartmentIds)];
+  return selectedIds;
 }
 
 async function archiveActiveDirectivesForReplace(

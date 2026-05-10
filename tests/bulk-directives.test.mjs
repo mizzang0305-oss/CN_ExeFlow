@@ -150,9 +150,11 @@ test("지시사항 전체 교체 API와 운영 안전장치가 제공된다", ()
   assert.match(schemas, /confirmText/);
   assert.match(schemas, /전체교체/);
   assert.match(service, /DIRECTIVE_REPLACE/);
+  assert.match(service, /DIRECTIVE_REPLACE_SOURCE_SHEET_NAMES/);
+  assert.match(service, /대표이사 지시사항/);
+  assert.match(service, /부사장 지시사항/);
+  assert.match(service, /DIRECTIVE_REPLACE_VALIDATION_SHEET_NAME/);
   assert.match(service, /통합 지시사항/);
-  assert.doesNotMatch(service, /대표이사 지시사항["']/);
-  assert.doesNotMatch(service, /부사장 지시사항["']/);
   assert.match(service, /is_archived:\s*true/);
   assert.match(service, /OLD-\$\{directive\.directive_no\}/);
   assert.match(service, /엑셀 재등록 전 기존 지시사항 전체 비노출/);
@@ -161,11 +163,12 @@ test("지시사항 전체 교체 API와 운영 안전장치가 제공된다", ()
   assert.doesNotMatch(registerRoute, /\.delete\(/);
 });
 
-test("엑셀 전체 교체는 통합 시트의 부서와 상태를 운영 기준으로 매핑한다", () => {
+test("엑셀 전체 교체는 원본 시트의 부서와 상태를 운영·보고 기준으로 매핑한다", () => {
   const constants = read("src/features/bulk-directives/constants.ts");
   const service = read("src/features/bulk-directives/service.ts");
 
   assert.match(constants, /BULK_DIRECTIVE_REPLACE_REQUIRED_COLUMNS/);
+  assert.match(constants, /BULK_DIRECTIVE_REPLACE_NOTE_COLUMNS/);
   assert.match(constants, /No\./);
   assert.match(constants, /기한/);
   assert.match(constants, /지속:\s*"IN_PROGRESS"/);
@@ -175,7 +178,13 @@ test("엑셀 전체 교체는 통합 시트의 부서와 상태를 운영 기준
   assert.match(service, /구매물류부["'],\s*["']구매물류부/);
   assert.match(service, /전 부서["'],\s*["']전체/);
   assert.match(service, /주식회사 씨엔푸드["'],\s*["']전체/);
-  assert.match(service, /HACCP["'],\s*["']공장총괄본부/);
+  assert.match(service, /HACCP["'],\s*["']경영관리센터/);
+  assert.doesNotMatch(service, /HACCP["'],\s*["']공장총괄본부/);
+  assert.match(service, /보고상태/);
+  assert.match(service, /보고담당부서/);
+  assert.match(service, /departmentResult\.departmentNames\.join\(", "\)/);
+  assert.match(service, /expandAllDepartment:\s*false/);
+  assert.match(service, /targetScope:\s*"SELECTED"/);
   assert.match(service, /resolveDepartments/);
 });
 
