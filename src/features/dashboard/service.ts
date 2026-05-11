@@ -54,10 +54,10 @@ type DepartmentNameRow = {
 
 type CeoReportDirectiveRow = {
   content: string | null;
-  created_at: string | null;
   directive_no: string;
   due_date: string | null;
   id: string;
+  instructed_at?: string | null;
   status: string;
   title: string;
 };
@@ -66,6 +66,16 @@ type CeoReportDepartmentAssignmentRow = {
   department_id: string;
   directive_id: string;
 };
+
+const CEO_REPORT_DIRECTIVE_COLUMNS =
+  "id, directive_no, title, content, status, due_date, instructed_at";
+
+const CEO_REPORT_DIRECTIVE_COLUMNS_WITHOUT_INSTRUCTED_AT =
+  "id, directive_no, title, content, status, due_date";
+
+function isMissingInstructedAtColumnError(error: { code?: string; message?: string } | null) {
+  return error?.code === "42703" && error.message?.includes("instructed_at") === true;
+}
 
 function isActiveDirective(item: DirectiveListItem) {
   return item.status !== "COMPLETED";
@@ -286,10 +296,24 @@ function buildWeeklyTrend(recentReports: Awaited<ReturnType<typeof getReportsOve
 
 async function loadCeoReportSummary() {
   const client = createSupabaseServerClient();
-  const { data: directives, error: directivesError } = await client
+  const directivesResult = await client
     .from("directives")
-    .select("id, directive_no, title, content, status, due_date, created_at")
-    .eq("is_archived", false);
+    .select(CEO_REPORT_DIRECTIVE_COLUMNS)
+    .eq("is_archived", false)
+    .order("directive_no", { ascending: true });
+  let directives = directivesResult.data as CeoReportDirectiveRow[] | null;
+  let directivesError = directivesResult.error;
+
+  if (isMissingInstructedAtColumnError(directivesError)) {
+    const fallbackResult = await client
+      .from("directives")
+      .select(CEO_REPORT_DIRECTIVE_COLUMNS_WITHOUT_INSTRUCTED_AT)
+      .eq("is_archived", false)
+      .order("directive_no", { ascending: true });
+
+    directives = fallbackResult.data as CeoReportDirectiveRow[] | null;
+    directivesError = fallbackResult.error;
+  }
 
   if (directivesError) {
     throw new ApiError(500, "대표 보고용 지시사항을 불러오지 못했습니다.", directivesError, "CEO_REPORT_DIRECTIVES_FAILED");
@@ -356,7 +380,7 @@ async function loadCeoReportSummary() {
       directiveNo: directive.directive_no,
       dueDate: directive.due_date,
       id: directive.id,
-      instructedAt: directive.created_at,
+      instructedAt: directive.instructed_at ?? null,
       status: directive.status,
       title: directive.title,
     })),
