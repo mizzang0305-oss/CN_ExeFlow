@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CeoDashboardData, DepartmentAnalysisItem } from "@/features/dashboard";
+import {
+  filterCeoReportDirectiveItems,
+  type CeoReportBucket,
+  type CeoReportDirectiveItem,
+  type CeoReportDrilldownFilter,
+  type CeoReportSourceLabel,
+} from "@/features/dashboard/ceo-report";
 import type { DirectiveStatusValue } from "@/lib/constants/status-labels";
 import {
   normalizeDirectiveStatus,
@@ -41,6 +49,9 @@ const analysisActionClassName =
 const dangerActionClassName =
   "management-clickable inline-flex min-h-11 items-center justify-center rounded-[16px] border border-danger-200 bg-danger-50 px-4 py-2 text-base font-bold text-danger-700 shadow-[0_10px_24px_rgba(220,38,38,0.08)] transition hover:border-danger-300 hover:bg-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-danger-200 active:translate-y-[1px]";
 
+const reportMetricButtonClassName =
+  "management-clickable rounded-[3px] transition hover:bg-white/65 focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300 active:translate-y-[1px]";
+
 function getReportBlockCount(rate: number) {
   return Math.max(0, Math.min(10, Math.round(rate / 10)));
 }
@@ -64,27 +75,90 @@ function ReportRateBlocks({ rate }: { rate: number }) {
   );
 }
 
-function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
+function ReportMetricButton({
+  ariaLabel,
+  children,
+  className,
+  onClick,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  className?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={onClick}
+      className={cn(reportMetricButtonClassName, className)}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CeoReportPanel({
+  onOpenDrilldown,
+  report,
+}: {
+  onOpenDrilldown: (filter: CeoReportDrilldownFilter) => void;
+  report: CeoDashboardData["ceoReport"];
+}) {
   const kpis = [
     {
+      bucket: "진행중" as const,
       className: "bg-[#FFF1E7]",
       label: "진행 중",
       numberClassName: "text-[#D26A1E]",
       value: report.total.inProgressCount,
     },
     {
+      bucket: "완료" as const,
       className: "bg-[#E9F2E2]",
       label: "완료",
       numberClassName: "text-[#2F6F2A]",
       value: report.total.completedCount,
     },
     {
+      bucket: "지속" as const,
       className: "bg-[#ECE7F0]",
       label: "지속",
       numberClassName: "text-[#6A51AA]",
       value: report.total.continuingCount,
     },
   ];
+
+  const openBucket = (bucket: CeoReportBucket, label: string) => {
+    onOpenDrilldown({
+      bucket,
+      title: `${label} 지시사항`,
+    });
+  };
+
+  const openDepartment = (
+    departmentName: string,
+    title: string,
+    options?: { bucket?: CeoReportBucket; buckets?: CeoReportBucket[] },
+  ) => {
+    onOpenDrilldown({
+      ...options,
+      departmentName,
+      title,
+    });
+  };
+
+  const openSource = (
+    sourceLabel: CeoReportSourceLabel,
+    title: string,
+    options?: { bucket?: CeoReportBucket; buckets?: CeoReportBucket[] },
+  ) => {
+    onOpenDrilldown({
+      ...options,
+      sourceLabel,
+      title,
+    });
+  };
 
   return (
     <section
@@ -101,19 +175,37 @@ function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
         </div>
       </div>
 
-      <div className="mt-7 bg-[#3F6090] px-4 py-3.5 text-center text-xl font-black text-white sm:text-2xl">
+      <button
+        type="button"
+        aria-label={`전체 지시사항 ${report.total.totalCount}건 보기`}
+        onClick={() => onOpenDrilldown({ title: "전체 지시사항" })}
+        className={cn(
+          reportMetricButtonClassName,
+          "mt-7 block w-full bg-[#3F6090] px-4 py-3.5 text-center text-xl font-black text-white hover:bg-[#34527D] sm:text-2xl",
+        )}
+      >
         총 지시사항 {report.total.totalCount} 건
-      </div>
+      </button>
 
       <div className="mt-2 grid gap-2 md:grid-cols-3">
         {kpis.map((kpi) => (
-          <div key={kpi.label} className={cn("min-h-[9.5rem] px-5 py-6 text-center lg:min-h-[10rem]", kpi.className)}>
+          <button
+            key={kpi.label}
+            type="button"
+            aria-label={`${kpi.label} 지시사항 ${kpi.value}건 보기`}
+            onClick={() => openBucket(kpi.bucket, kpi.label)}
+            className={cn(
+              reportMetricButtonClassName,
+              "min-h-[9.5rem] px-5 py-6 text-center lg:min-h-[10rem]",
+              kpi.className,
+            )}
+          >
             <p className="text-lg font-black text-[#1F2F45] sm:text-xl">{kpi.label}</p>
             <p className={cn("mt-4 text-5xl font-black leading-none sm:text-6xl", kpi.numberClassName)}>
               {kpi.value}
               <span className="ml-2 text-3xl font-black">건</span>
             </p>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -133,16 +225,86 @@ function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
             <tbody className="divide-y divide-[#D5DEE8] text-lg font-black">
               {report.departmentSummary.map((department) => (
                 <tr key={department.departmentName} className="bg-white">
-                  <td className="px-4 py-3 text-center">{department.departmentName}</td>
-                  <td className="px-3 py-3 text-center">{department.totalCount} 건</td>
-                  <td className="px-3 py-3 text-center text-[#D26A1E]">{department.inProgressCount} 건</td>
-                  <td className="px-3 py-3 text-center text-[#2F6F2A]">{department.completedCount} 건</td>
-                  <td className="px-3 py-3 text-center text-[#6A51AA]">{department.continuingCount} 건</td>
+                  <td className="px-4 py-3 text-center">
+                    <ReportMetricButton
+                      ariaLabel={`${department.departmentName} 지시사항 ${department.totalCount}건 보기`}
+                      onClick={() =>
+                        openDepartment(department.departmentName, `${department.departmentName} 지시사항`)
+                      }
+                      className="inline-flex min-h-8 items-center justify-center px-2 font-black"
+                    >
+                      {department.departmentName}
+                    </ReportMetricButton>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <ReportMetricButton
+                      ariaLabel={`${department.departmentName} 전체 지시사항 ${department.totalCount}건 보기`}
+                      onClick={() =>
+                        openDepartment(department.departmentName, `${department.departmentName} 전체 지시사항`)
+                      }
+                      className="inline-flex min-h-8 items-center justify-center px-2 font-black"
+                    >
+                      {department.totalCount} 건
+                    </ReportMetricButton>
+                  </td>
+                  <td className="px-3 py-3 text-center text-[#D26A1E]">
+                    <ReportMetricButton
+                      ariaLabel={`${department.departmentName} 진행중 지시사항 ${department.inProgressCount}건 보기`}
+                      onClick={() =>
+                        openDepartment(department.departmentName, `${department.departmentName} 진행중 지시사항`, {
+                          bucket: "진행중",
+                        })
+                      }
+                      className="inline-flex min-h-8 items-center justify-center px-2 font-black"
+                    >
+                      {department.inProgressCount} 건
+                    </ReportMetricButton>
+                  </td>
+                  <td className="px-3 py-3 text-center text-[#2F6F2A]">
+                    <ReportMetricButton
+                      ariaLabel={`${department.departmentName} 완료 지시사항 ${department.completedCount}건 보기`}
+                      onClick={() =>
+                        openDepartment(department.departmentName, `${department.departmentName} 완료 지시사항`, {
+                          bucket: "완료",
+                        })
+                      }
+                      className="inline-flex min-h-8 items-center justify-center px-2 font-black"
+                    >
+                      {department.completedCount} 건
+                    </ReportMetricButton>
+                  </td>
+                  <td className="px-3 py-3 text-center text-[#6A51AA]">
+                    <ReportMetricButton
+                      ariaLabel={`${department.departmentName} 지속 지시사항 ${department.continuingCount}건 보기`}
+                      onClick={() =>
+                        openDepartment(department.departmentName, `${department.departmentName} 지속 지시사항`, {
+                          bucket: "지속",
+                        })
+                      }
+                      className="inline-flex min-h-8 items-center justify-center px-2 font-black"
+                    >
+                      {department.continuingCount} 건
+                    </ReportMetricButton>
+                  </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-between gap-6">
+                    <button
+                      type="button"
+                      aria-label={`${department.departmentName} 이행 완료·지속 지시사항 ${
+                        department.completedCount + department.continuingCount
+                      }건 보기`}
+                      onClick={() =>
+                        openDepartment(department.departmentName, `${department.departmentName} 이행 지시사항`, {
+                          buckets: ["완료", "지속"],
+                        })
+                      }
+                      className={cn(
+                        reportMetricButtonClassName,
+                        "flex w-full items-center justify-between gap-6 px-2 py-1 font-black",
+                      )}
+                    >
                       <ReportRateBlocks rate={department.completionRate} />
                       <span className="w-14 shrink-0 text-right text-[#2F6F2A]">{department.completionRate}%</span>
-                    </div>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -154,19 +316,77 @@ function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
           {report.departmentSummary.map((department) => (
             <div key={department.departmentName} className="border border-[#D5DEE8] bg-white px-4 py-4">
               <div className="flex items-start justify-between gap-3">
-                <h3 className="text-lg font-black">{department.departmentName}</h3>
+                <button
+                  type="button"
+                  aria-label={`${department.departmentName} 지시사항 ${department.totalCount}건 보기`}
+                  onClick={() => openDepartment(department.departmentName, `${department.departmentName} 지시사항`)}
+                  className={cn(reportMetricButtonClassName, "text-left text-lg font-black")}
+                >
+                  {department.departmentName}
+                </button>
                 <span className="shrink-0 text-lg font-black text-[#2F6F2A]">{department.completionRate}%</span>
               </div>
               <div className="mt-3 grid grid-cols-4 gap-2 text-center text-sm font-black">
-                <div className="bg-[#E7EDF5] px-2 py-2">총 {department.totalCount}건</div>
-                <div className="bg-[#FFF1E7] px-2 py-2 text-[#D26A1E]">진행 {department.inProgressCount}</div>
-                <div className="bg-[#E9F2E2] px-2 py-2 text-[#2F6F2A]">완료 {department.completedCount}</div>
-                <div className="bg-[#ECE7F0] px-2 py-2 text-[#6A51AA]">지속 {department.continuingCount}</div>
+                <button
+                  type="button"
+                  aria-label={`${department.departmentName} 전체 지시사항 ${department.totalCount}건 보기`}
+                  onClick={() => openDepartment(department.departmentName, `${department.departmentName} 전체 지시사항`)}
+                  className={cn(reportMetricButtonClassName, "bg-[#E7EDF5] px-2 py-2 font-black")}
+                >
+                  총 {department.totalCount}건
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${department.departmentName} 진행중 지시사항 ${department.inProgressCount}건 보기`}
+                  onClick={() =>
+                    openDepartment(department.departmentName, `${department.departmentName} 진행중 지시사항`, {
+                      bucket: "진행중",
+                    })
+                  }
+                  className={cn(reportMetricButtonClassName, "bg-[#FFF1E7] px-2 py-2 font-black text-[#D26A1E]")}
+                >
+                  진행 {department.inProgressCount}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${department.departmentName} 완료 지시사항 ${department.completedCount}건 보기`}
+                  onClick={() =>
+                    openDepartment(department.departmentName, `${department.departmentName} 완료 지시사항`, {
+                      bucket: "완료",
+                    })
+                  }
+                  className={cn(reportMetricButtonClassName, "bg-[#E9F2E2] px-2 py-2 font-black text-[#2F6F2A]")}
+                >
+                  완료 {department.completedCount}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${department.departmentName} 지속 지시사항 ${department.continuingCount}건 보기`}
+                  onClick={() =>
+                    openDepartment(department.departmentName, `${department.departmentName} 지속 지시사항`, {
+                      bucket: "지속",
+                    })
+                  }
+                  className={cn(reportMetricButtonClassName, "bg-[#ECE7F0] px-2 py-2 font-black text-[#6A51AA]")}
+                >
+                  지속 {department.continuingCount}
+                </button>
               </div>
-              <div className="mt-3 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                aria-label={`${department.departmentName} 이행 완료·지속 지시사항 ${
+                  department.completedCount + department.continuingCount
+                }건 보기`}
+                onClick={() =>
+                  openDepartment(department.departmentName, `${department.departmentName} 이행 지시사항`, {
+                    buckets: ["완료", "지속"],
+                  })
+                }
+                className={cn(reportMetricButtonClassName, "mt-3 flex w-full items-center justify-between gap-3 py-1")}
+              >
                 <ReportRateBlocks rate={department.completionRate} />
                 <span className="text-base font-black text-[#2F6F2A]">{department.completionRate}%</span>
-              </div>
+              </button>
             </div>
           ))}
         </div>
@@ -180,14 +400,64 @@ function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
                 index === 0 ? "bg-[#E7EDF5]" : "bg-[#F4EFE7]",
               )}
             >
-              <p className="text-center md:text-left md:pl-20">{source.sourceLabel}</p>
-              <p className="flex flex-wrap items-center justify-center gap-x-7 gap-y-1 md:justify-end">
-                <span>총 {source.totalCount} 건</span>
-                <span className="text-[#D26A1E]">진행중 {source.inProgressCount}</span>
-                <span className="text-[#2F6F2A]">완료 {source.completedCount}</span>
-                <span className="text-[#6A51AA]">지속 {source.continuingCount}</span>
-                <span className="text-[#3F6090]">이행률 {source.completionRate}%</span>
-              </p>
+              <div className="text-center md:text-left md:pl-20">
+                <ReportMetricButton
+                  ariaLabel={`${source.sourceLabel} 전체 지시사항 ${source.totalCount}건 보기`}
+                  onClick={() => openSource(source.sourceLabel, `${source.sourceLabel} 지시사항`)}
+                  className="inline-flex min-h-8 items-center justify-center px-2 font-black"
+                >
+                  {source.sourceLabel}
+                </ReportMetricButton>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 md:justify-end">
+                <ReportMetricButton
+                  ariaLabel={`${source.sourceLabel} 전체 지시사항 ${source.totalCount}건 보기`}
+                  onClick={() => openSource(source.sourceLabel, `${source.sourceLabel} 전체 지시사항`)}
+                  className="inline-flex min-h-8 items-center justify-center px-1 font-black"
+                >
+                  총 {source.totalCount} 건
+                </ReportMetricButton>
+                <ReportMetricButton
+                  ariaLabel={`${source.sourceLabel} 진행중 지시사항 ${source.inProgressCount}건 보기`}
+                  onClick={() =>
+                    openSource(source.sourceLabel, `${source.sourceLabel} 진행중 지시사항`, { bucket: "진행중" })
+                  }
+                  className="inline-flex min-h-8 items-center justify-center px-1 font-black text-[#D26A1E]"
+                >
+                  진행중 {source.inProgressCount}
+                </ReportMetricButton>
+                <ReportMetricButton
+                  ariaLabel={`${source.sourceLabel} 완료 지시사항 ${source.completedCount}건 보기`}
+                  onClick={() =>
+                    openSource(source.sourceLabel, `${source.sourceLabel} 완료 지시사항`, { bucket: "완료" })
+                  }
+                  className="inline-flex min-h-8 items-center justify-center px-1 font-black text-[#2F6F2A]"
+                >
+                  완료 {source.completedCount}
+                </ReportMetricButton>
+                <ReportMetricButton
+                  ariaLabel={`${source.sourceLabel} 지속 지시사항 ${source.continuingCount}건 보기`}
+                  onClick={() =>
+                    openSource(source.sourceLabel, `${source.sourceLabel} 지속 지시사항`, { bucket: "지속" })
+                  }
+                  className="inline-flex min-h-8 items-center justify-center px-1 font-black text-[#6A51AA]"
+                >
+                  지속 {source.continuingCount}
+                </ReportMetricButton>
+                <ReportMetricButton
+                  ariaLabel={`${source.sourceLabel} 이행 완료·지속 지시사항 ${
+                    source.completedCount + source.continuingCount
+                  }건 보기`}
+                  onClick={() =>
+                    openSource(source.sourceLabel, `${source.sourceLabel} 이행 지시사항`, {
+                      buckets: ["완료", "지속"],
+                    })
+                  }
+                  className="inline-flex min-h-8 items-center justify-center px-1 font-black text-[#3F6090]"
+                >
+                  이행률 {source.completionRate}%
+                </ReportMetricButton>
+              </div>
             </div>
           ))}
         </div>
@@ -197,6 +467,153 @@ function CeoReportPanel({ report }: { report: CeoDashboardData["ceoReport"] }) {
         </p>
       </div>
     </section>
+  );
+}
+
+function formatReportDateLabel(dateString: string | null) {
+  if (!dateString) {
+    return null;
+  }
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateString;
+  }
+
+  return date.toLocaleDateString("ko-KR", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  });
+}
+
+function isReportItemDelayed(item: CeoReportDirectiveItem) {
+  if (!item.dueDate || item.status === "COMPLETED") {
+    return false;
+  }
+
+  const dueTime = new Date(item.dueDate).getTime();
+  return Number.isFinite(dueTime) && dueTime < Date.now();
+}
+
+function CeoReportDirectiveDrilldown({
+  filter,
+  items,
+  onClose,
+}: {
+  filter: CeoReportDrilldownFilter;
+  items: CeoReportDirectiveItem[];
+  onClose: () => void;
+}) {
+  const filteredItems = useMemo(() => filterCeoReportDirectiveItems(items, filter), [filter, items]);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-end overflow-hidden bg-ink-950/45 md:items-stretch md:p-5">
+      <button
+        type="button"
+        aria-label="대표 보고 드릴다운 닫기"
+        className="absolute inset-0 cursor-default"
+        onClick={onClose}
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${filter.title} 지시사항 목록`}
+        className="relative z-10 flex max-h-[88vh] w-full min-w-0 flex-col overflow-hidden rounded-t-[24px] bg-white shadow-[0_24px_80px_rgba(6,18,38,0.28)] md:h-full md:max-h-none md:w-[min(36rem,calc(100vw-2rem))] md:rounded-[24px]"
+      >
+        <div className="border-b border-ink-100 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-brand-700">대표 보고 드릴다운</p>
+              <h2 className="mt-1 break-words text-2xl font-black text-ink-950">
+                {filter.title} · {filteredItems.length}건
+              </h2>
+            </div>
+            <button
+              type="button"
+              aria-label="드릴다운 닫기"
+              onClick={onClose}
+              className="management-clickable inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-ink-200 bg-white text-2xl font-bold text-ink-700 shadow-sm transition hover:border-ink-400 focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          {filteredItems.length === 0 ? (
+            <div className="rounded-[18px] border border-dashed border-ink-200 bg-ink-50 px-4 py-8 text-center text-base font-bold text-ink-600">
+              해당 조건의 지시사항이 없습니다.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {filteredItems.map((item) => {
+                const delayed = isReportItemDelayed(item);
+                const dueDateLabel = formatReportDateLabel(item.dueDate);
+
+                return (
+                  <li key={item.id} className="rounded-[18px] border border-ink-100 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-black">
+                          <span className="rounded-full bg-ink-100 px-2.5 py-1 text-ink-700">{item.directiveNo}</span>
+                          <span className="rounded-full bg-brand-50 px-2.5 py-1 text-brand-800">
+                            {item.sourceLabel}
+                          </span>
+                          <span className="rounded-full bg-[#ECE7F0] px-2.5 py-1 text-[#6A51AA]">
+                            {item.reportBucket}
+                          </span>
+                          <span className="rounded-full bg-ink-50 px-2.5 py-1 text-ink-700">
+                            {item.statusLabel}
+                          </span>
+                          {delayed ? (
+                            <span className="rounded-full bg-danger-50 px-2.5 py-1 text-danger-700">기한 경과</span>
+                          ) : null}
+                        </div>
+                        <h3 className="mt-3 break-words text-base font-black leading-snug text-ink-950">
+                          {item.title}
+                        </h3>
+                        <dl className="mt-3 grid gap-2 text-sm font-semibold text-ink-700">
+                          <div>
+                            <dt className="sr-only">보고 담당부서</dt>
+                            <dd>담당: {item.departmentNames.join(", ")}</dd>
+                          </div>
+                          {dueDateLabel ? (
+                            <div>
+                              <dt className="sr-only">기한</dt>
+                              <dd>기한: {dueDateLabel}</dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                      </div>
+                      <Link
+                        href={item.href}
+                        aria-label={`${item.directiveNo} ${item.title} 상세 보기`}
+                        className="management-clickable inline-flex shrink-0 items-center justify-center rounded-[14px] border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-black text-brand-900 transition hover:border-brand-400 hover:bg-white focus-visible:outline focus-visible:outline-4 focus-visible:outline-brand-300"
+                      >
+                        상세 보기
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -865,6 +1282,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [openAnalysisModal, setOpenAnalysisModal] = useState<AnalysisModalType | null>(null);
+  const [reportDrilldownFilter, setReportDrilldownFilter] = useState<CeoReportDrilldownFilter | null>(null);
   const detailPanelRef = useRef<HTMLElement | null>(null);
 
   const selectedDepartment = useMemo(
@@ -947,6 +1365,10 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
       status: null,
       urgent: false,
     });
+  }, []);
+
+  const closeReportDrilldown = useCallback(() => {
+    setReportDrilldownFilter(null);
   }, []);
 
   const prefetchDepartment = useCallback(
@@ -1058,7 +1480,7 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
       ) : null}
 
       <div className={cn(shouldShowPanel && "xl:pr-[640px] 2xl:pr-[680px]")}>
-        <CeoReportPanel report={data.ceoReport} />
+        <CeoReportPanel report={data.ceoReport} onOpenDrilldown={setReportDrilldownFilter} />
       </div>
 
       <section aria-label="경영 요약" className={cn("space-y-4", shouldShowPanel && "xl:pr-[640px] 2xl:pr-[680px]")}>
@@ -1215,6 +1637,14 @@ export function CeoDashboardClient({ data }: CeoDashboardClientProps) {
           onClose={() => setOpenAnalysisModal(null)}
           onDepartmentSelect={selectDepartment}
           onStatusSelect={selectDepartmentStatus}
+        />
+      ) : null}
+
+      {reportDrilldownFilter ? (
+        <CeoReportDirectiveDrilldown
+          filter={reportDrilldownFilter}
+          items={data.ceoReport.items}
+          onClose={closeReportDrilldown}
         />
       ) : null}
     </div>
