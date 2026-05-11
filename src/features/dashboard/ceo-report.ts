@@ -5,11 +5,18 @@ export type CeoReportInputItem = {
   assignedDepartments?: readonly { departmentName?: string | null }[];
   content?: string | null;
   departments?: readonly string[];
+  directiveNo?: string | null;
+  dueDate?: string | null;
+  id?: string | null;
+  instructedAt?: string | null;
+  internalStatus?: string | null;
   originalDepartmentText?: string | null;
   rawStatus?: string | null;
   reportBucket?: string | null;
+  sourceOrder?: number | string | null;
   sourceLabel?: string | null;
   status?: string | null;
+  title?: string | null;
 };
 
 export type CeoReportMetricSummary = {
@@ -28,8 +35,31 @@ export type CeoReportSourceSummary = CeoReportMetricSummary & {
   sourceLabel: CeoReportSourceLabel;
 };
 
+export type CeoReportDirectiveItem = {
+  departmentNames: string[];
+  directiveNo: string;
+  dueDate: string | null;
+  href: string;
+  id: string;
+  instructedAt: string | null;
+  reportBucket: CeoReportBucket;
+  sourceLabel: CeoReportSourceLabel;
+  status: string;
+  statusLabel: string;
+  title: string;
+};
+
+export type CeoReportDrilldownFilter = {
+  bucket?: CeoReportBucket;
+  buckets?: CeoReportBucket[];
+  departmentName?: string;
+  sourceLabel?: CeoReportSourceLabel;
+  title: string;
+};
+
 export type CeoReportSummary = {
   departmentSummary: CeoReportDepartmentSummary[];
+  items: CeoReportDirectiveItem[];
   meetingLabel: string;
   reportDateLabel: string;
   sourceSummary: CeoReportSourceSummary[];
@@ -47,6 +77,15 @@ const CEO_REPORT_DEPARTMENT_ORDER = [
 ] as const;
 
 const CEO_REPORT_SOURCE_ORDER = ["대표 지시사항", "부사장 지시사항"] as const;
+
+const CEO_REPORT_STATUS_LABELS = new Map<string, string>([
+  ["NEW", "대기"],
+  ["IN_PROGRESS", "진행중"],
+  ["COMPLETION_REQUESTED", "승인 대기"],
+  ["DELAYED", "지연"],
+  ["COMPLETED", "완료"],
+  ["REJECTED", "반려"],
+]);
 
 const departmentAliases = new Map<string, (typeof CEO_REPORT_DEPARTMENT_ORDER)[number]>([
   ["전체", "전 부서"],
@@ -189,8 +228,78 @@ function resolveReportDepartments(item: CeoReportInputItem, metadata: ReturnType
   );
 }
 
+function getCeoReportStatusLabel(status: string) {
+  return CEO_REPORT_STATUS_LABELS.get(status) ?? "상태 확인 필요";
+}
+
+function getFallbackDirectiveNo(item: CeoReportInputItem, index: number) {
+  if (item.sourceOrder !== null && item.sourceOrder !== undefined && `${item.sourceOrder}`.trim()) {
+    return `REPORT-${`${item.sourceOrder}`.trim().padStart(3, "0")}`;
+  }
+
+  return `REPORT-${`${index + 1}`.padStart(3, "0")}`;
+}
+
+function getFallbackTitle(content: string | null | undefined) {
+  const firstLine = content?.split(/\r?\n/).find((line) => line.trim())?.trim();
+  return firstLine || "지시사항";
+}
+
+function buildCeoReportDirectiveItem(
+  item: CeoReportInputItem,
+  options: {
+    bucket: CeoReportBucket;
+    departments: string[];
+    index: number;
+    sourceLabel: CeoReportSourceLabel;
+  },
+): CeoReportDirectiveItem {
+  const id = item.id?.trim() || `report-${options.index + 1}`;
+  const status = item.status ?? item.internalStatus ?? (options.bucket === "완료" ? "COMPLETED" : "IN_PROGRESS");
+
+  return {
+    departmentNames: [...options.departments],
+    directiveNo: item.directiveNo?.trim() || getFallbackDirectiveNo(item, options.index),
+    dueDate: item.dueDate ?? null,
+    href: `/directives/${id}`,
+    id,
+    instructedAt: item.instructedAt ?? null,
+    reportBucket: options.bucket,
+    sourceLabel: options.sourceLabel,
+    status,
+    statusLabel: getCeoReportStatusLabel(status),
+    title: item.title?.trim() || getFallbackTitle(item.content),
+  };
+}
+
+export function filterCeoReportDirectiveItems(
+  items: readonly CeoReportDirectiveItem[],
+  filter: CeoReportDrilldownFilter,
+) {
+  return items.filter((item) => {
+    if (filter.bucket && item.reportBucket !== filter.bucket) {
+      return false;
+    }
+
+    if (filter.buckets && !filter.buckets.includes(item.reportBucket)) {
+      return false;
+    }
+
+    if (filter.departmentName && !item.departmentNames.includes(filter.departmentName)) {
+      return false;
+    }
+
+    if (filter.sourceLabel && item.sourceLabel !== filter.sourceLabel) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
 export function buildCeoReportSummary(items: readonly CeoReportInputItem[]): CeoReportSummary {
   const total = createEmptyMetricSummary();
+  const reportItems: CeoReportDirectiveItem[] = [];
   const departmentMap = new Map<string, CeoReportMetricSummary>(
     CEO_REPORT_DEPARTMENT_ORDER.map((departmentName) => [departmentName, createEmptyMetricSummary()]),
   );
@@ -198,11 +307,11 @@ export function buildCeoReportSummary(items: readonly CeoReportInputItem[]): Ceo
     CEO_REPORT_SOURCE_ORDER.map((sourceLabel) => [sourceLabel, createEmptyMetricSummary()]),
   );
 
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     const metadata = extractCeoReportMetadata(item.content);
     const bucket = normalizeCeoReportBucket(
       item.reportBucket ?? item.rawStatus ?? metadata.reportBucket,
-      item.status,
+      item.status ?? item.internalStatus,
     );
     const sourceLabel = normalizeCeoReportSourceLabel(item.sourceLabel ?? metadata.sourceLabel);
     const departments = resolveReportDepartments(item, metadata);
@@ -217,6 +326,15 @@ export function buildCeoReportSummary(items: readonly CeoReportInputItem[]): Ceo
         applyBucket(summary, bucket);
       }
     }
+
+    reportItems.push(
+      buildCeoReportDirectiveItem(item, {
+        bucket,
+        departments,
+        index,
+        sourceLabel,
+      }),
+    );
   }
 
   return {
@@ -224,6 +342,7 @@ export function buildCeoReportSummary(items: readonly CeoReportInputItem[]): Ceo
       departmentName,
       ...finalizeSummary(departmentMap.get(departmentName) ?? createEmptyMetricSummary()),
     })),
+    items: reportItems,
     meetingLabel: "주간 관리자 회의",
     reportDateLabel: "2026. 5. 8.",
     sourceSummary: CEO_REPORT_SOURCE_ORDER.map((sourceLabel) => ({

@@ -53,9 +53,13 @@ type DepartmentNameRow = {
 };
 
 type CeoReportDirectiveRow = {
-  content: string;
+  content: string | null;
+  created_at: string | null;
+  directive_no: string;
+  due_date: string | null;
   id: string;
   status: string;
+  title: string;
 };
 
 type CeoReportDepartmentAssignmentRow = {
@@ -284,7 +288,7 @@ async function loadCeoReportSummary() {
   const client = createSupabaseServerClient();
   const { data: directives, error: directivesError } = await client
     .from("directives")
-    .select("id, content, status")
+    .select("id, directive_no, title, content, status, due_date, created_at")
     .eq("is_archived", false);
 
   if (directivesError) {
@@ -349,7 +353,12 @@ async function loadCeoReportSummary() {
     directiveRows.map((directive) => ({
       assignedDepartments: assignmentsByDirective.get(directive.id) ?? [],
       content: directive.content,
+      directiveNo: directive.directive_no,
+      dueDate: directive.due_date,
+      id: directive.id,
+      instructedAt: directive.created_at,
       status: directive.status,
+      title: directive.title,
     })),
   );
 }

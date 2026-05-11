@@ -145,6 +145,143 @@ test("대표 보고 집계는 전체·주관·부서별 검증값과 이행률 �
   }
 });
 
+test("대표 보고 요약은 드릴다운용 지시사항 item 데이터를 포함한다", () => {
+  const { CN_DIRECTIVES_260508 } = loadTypeScriptModule("src/data/cn-directives-260508.ts");
+  const { buildCeoReportSummary } = loadTypeScriptModule("src/features/dashboard/ceo-report.ts");
+
+  const report = buildCeoReportSummary(CN_DIRECTIVES_260508);
+  const firstItem = report.items[0];
+
+  assert.equal(report.items.length, report.total.totalCount);
+  assert.ok(firstItem.id);
+  assert.ok(firstItem.directiveNo);
+  assert.ok(firstItem.title);
+  assert.equal(firstItem.href, `/directives/${firstItem.id}`);
+  assert.ok(["진행중", "완료", "지속"].includes(firstItem.reportBucket));
+  assert.ok(["대표 지시사항", "부사장 지시사항"].includes(firstItem.sourceLabel));
+  assert.equal(Array.isArray(firstItem.departmentNames), true);
+  assert.ok(firstItem.departmentNames.length > 0);
+  assert.ok(firstItem.status);
+  assert.ok(firstItem.statusLabel);
+  assert.equal("dueDate" in firstItem, true);
+});
+
+test("대표 보고 드릴다운 필터는 보고 버킷별 지시사항을 정확히 고른다", () => {
+  const { CN_DIRECTIVES_260508 } = loadTypeScriptModule("src/data/cn-directives-260508.ts");
+  const {
+    buildCeoReportSummary,
+    filterCeoReportDirectiveItems,
+  } = loadTypeScriptModule("src/features/dashboard/ceo-report.ts");
+
+  const report = buildCeoReportSummary(CN_DIRECTIVES_260508);
+
+  assert.equal(
+    filterCeoReportDirectiveItems(report.items, { title: "진행 중", bucket: "진행중" }).length,
+    report.total.inProgressCount,
+  );
+  assert.equal(
+    filterCeoReportDirectiveItems(report.items, { title: "완료", bucket: "완료" }).length,
+    report.total.completedCount,
+  );
+  assert.equal(
+    filterCeoReportDirectiveItems(report.items, { title: "지속", bucket: "지속" }).length,
+    report.total.continuingCount,
+  );
+});
+
+test("대표 보고 드릴다운 필터는 각 부서장·각 리더·전 부서를 섞지 않는다", () => {
+  const { CN_DIRECTIVES_260508 } = loadTypeScriptModule("src/data/cn-directives-260508.ts");
+  const {
+    buildCeoReportSummary,
+    filterCeoReportDirectiveItems,
+  } = loadTypeScriptModule("src/features/dashboard/ceo-report.ts");
+
+  const report = buildCeoReportSummary(CN_DIRECTIVES_260508);
+  const byDepartment = new Map(report.departmentSummary.map((item) => [item.departmentName, item]));
+
+  for (const departmentName of ["각 부서장", "각 리더", "전 부서"]) {
+    const filteredItems = filterCeoReportDirectiveItems(report.items, { title: departmentName, departmentName });
+    assert.equal(filteredItems.length, byDepartment.get(departmentName)?.totalCount);
+    assert.equal(
+      filteredItems.every((item) => item.departmentNames.includes(departmentName)),
+      true,
+    );
+  }
+
+  assert.equal(
+    filterCeoReportDirectiveItems(report.items, { title: "각 부서장", departmentName: "각 부서장" }).some((item) =>
+      item.departmentNames.includes("전 부서"),
+    ),
+    false,
+  );
+  assert.equal(
+    filterCeoReportDirectiveItems(report.items, { title: "각 리더", departmentName: "각 리더" }).some((item) =>
+      item.departmentNames.includes("전 부서"),
+    ),
+    false,
+  );
+});
+
+test("대표 보고 드릴다운 필터는 주관별/복합 조건 수치를 표시 집계와 맞춘다", () => {
+  const { CN_DIRECTIVES_260508 } = loadTypeScriptModule("src/data/cn-directives-260508.ts");
+  const {
+    buildCeoReportSummary,
+    filterCeoReportDirectiveItems,
+  } = loadTypeScriptModule("src/features/dashboard/ceo-report.ts");
+
+  const report = buildCeoReportSummary(CN_DIRECTIVES_260508);
+
+  for (const source of report.sourceSummary) {
+    assert.equal(
+      filterCeoReportDirectiveItems(report.items, { title: source.sourceLabel, sourceLabel: source.sourceLabel }).length,
+      source.totalCount,
+    );
+    assert.equal(
+      filterCeoReportDirectiveItems(report.items, {
+        title: `${source.sourceLabel} 진행중`,
+        sourceLabel: source.sourceLabel,
+        bucket: "진행중",
+      }).length,
+      source.inProgressCount,
+    );
+    assert.equal(
+      filterCeoReportDirectiveItems(report.items, {
+        title: `${source.sourceLabel} 완료+지속`,
+        sourceLabel: source.sourceLabel,
+        buckets: ["완료", "지속"],
+      }).length,
+      source.completedCount + source.continuingCount,
+    );
+  }
+
+  for (const department of report.departmentSummary) {
+    assert.equal(
+      filterCeoReportDirectiveItems(report.items, {
+        title: `${department.departmentName} 진행중`,
+        departmentName: department.departmentName,
+        bucket: "진행중",
+      }).length,
+      department.inProgressCount,
+    );
+    assert.equal(
+      filterCeoReportDirectiveItems(report.items, {
+        title: `${department.departmentName} 완료`,
+        departmentName: department.departmentName,
+        bucket: "완료",
+      }).length,
+      department.completedCount,
+    );
+    assert.equal(
+      filterCeoReportDirectiveItems(report.items, {
+        title: `${department.departmentName} 완료+지속`,
+        departmentName: department.departmentName,
+        buckets: ["완료", "지속"],
+      }).length,
+      department.completedCount + department.continuingCount,
+    );
+  }
+});
+
 test("대표 보고 집계는 원본 담당부서 라벨을 실행 부서 정규화보다 우선한다", () => {
   const { buildCeoReportSummary } = loadTypeScriptModule("src/features/dashboard/ceo-report.ts");
   const report = buildCeoReportSummary([
@@ -273,6 +410,12 @@ test("대표 대시보드는 팀장 보고형 요약 패널을 데이터 기반�
   assert.match(dashboardSource, /이행률 = \(완료 \+ 지속\) \/ 총 건수/);
   assert.match(dashboardSource, /Array\.from\(\{ length: 10 \}/);
   assert.match(dashboardSource, /Math\.round\(rate \/ 10\)/);
+  assert.match(dashboardSource, /onOpenDrilldown/);
+  assert.match(dashboardSource, /CeoReportDirectiveDrilldown/);
+  assert.match(dashboardSource, /filterCeoReportDirectiveItems/);
+  assert.match(dashboardSource, /type="button"/);
+  assert.match(dashboardSource, /해당 조건의 지시사항이 없습니다/);
+  assert.match(dashboardSource, /href=\{item\.href\}/);
   assert.match(dashboardSource, /md:hidden/);
   assert.match(dashboardSource, /hidden overflow-hidden md:block/);
 });
